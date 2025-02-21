@@ -1,6 +1,7 @@
 import pygame
 import math
 import sys
+import random
 
 class Player:
     def __init__(self, x, y):
@@ -30,58 +31,93 @@ class Player:
             self.rect = new_rect
 
 class Map:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
+    def __init__(self):
+        # Make the map much larger than the screen
+        self.width = 2400  # 3x screen width
+        self.height = 1800  # 3x screen height
         self.tile_size = 32
         self.walls = []
-        self.create_boundary_walls()
-        self.create_obstacles()
+        self.roads = []
+        self.create_city_layout()
 
-    def create_boundary_walls(self):
-        # Create walls around the map
-        wall_thickness = 32
+    def create_city_layout(self):
+        # Create a grid of roads
+        road_width = 64
+        block_size = 200
 
-        # Top wall
-        self.walls.append(pygame.Rect(0, 0, self.width, wall_thickness))
-        # Bottom wall
-        self.walls.append(pygame.Rect(0, self.height - wall_thickness, self.width, wall_thickness))
-        # Left wall
-        self.walls.append(pygame.Rect(0, 0, wall_thickness, self.height))
-        # Right wall
-        self.walls.append(pygame.Rect(self.width - wall_thickness, 0, wall_thickness, self.height))
+        # Create horizontal roads
+        for y in range(0, self.height, block_size):
+            self.roads.append(pygame.Rect(0, y, self.width, road_width))
 
-    def create_obstacles(self):
-        # Add some building-like obstacles
-        obstacles = [
-            (200, 200, 100, 100),  # Building 1
-            (500, 300, 150, 80),   # Building 2
-            (300, 400, 80, 120),   # Building 3
-        ]
+        # Create vertical roads
+        for x in range(0, self.width, block_size):
+            self.roads.append(pygame.Rect(x, 0, road_width, self.height))
 
-        for obs in obstacles:
-            self.walls.append(pygame.Rect(obs))
+        # Create buildings in blocks
+        for block_x in range(road_width, self.width - road_width, block_size):
+            for block_y in range(road_width, self.height - road_width, block_size):
+                # Add 2-3 buildings per block
+                for _ in range(random.randint(2, 3)):
+                    building_width = random.randint(50, 120)
+                    building_height = random.randint(50, 120)
+                    x = block_x + random.randint(0, block_size - building_width - road_width)
+                    y = block_y + random.randint(0, block_size - building_height - road_width)
+                    self.walls.append(pygame.Rect(x, y, building_width, building_height))
 
-    def draw(self, screen):
+    def draw(self, screen, camera_x, camera_y):
+        # Draw roads (dark gray)
+        for road in self.roads:
+            # Adjust position based on camera
+            road_view = pygame.Rect(road.x - camera_x, road.y - camera_y, road.width, road.height)
+            if road_view.colliderect(screen.get_rect()):
+                pygame.draw.rect(screen, (50, 50, 50), road_view)
+
+        # Draw buildings (gray)
         for wall in self.walls:
-            pygame.draw.rect(screen, (100, 100, 100), wall)  # Gray walls
+            # Adjust position based on camera
+            wall_view = pygame.Rect(wall.x - camera_x, wall.y - camera_y, wall.width, wall.height)
+            if wall_view.colliderect(screen.get_rect()):
+                pygame.draw.rect(screen, (100, 100, 100), wall_view)
 
 class Game:
     def __init__(self):
-        # Set up the display
         self.width = 800
         self.height = 600
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("GTA Style Game")
 
         # Create game objects
-        self.map = Map(self.width, self.height)
+        self.map = Map()
         self.player = Player(self.width/2, self.height/2)
+
+        # Camera position (top-left corner of the view)
+        self.camera_x = 0
+        self.camera_y = 0
 
         # Game state
         self.running = True
         self.dragging = False
         self.last_mouse_pos = None
+
+    def update_camera(self):
+        # Camera follows player with some margin
+        margin = 200
+
+        # Update camera x position
+        if self.player.x - self.camera_x < margin:
+            self.camera_x = self.player.x - margin
+        elif self.player.x - self.camera_x > self.width - margin:
+            self.camera_x = self.player.x - (self.width - margin)
+
+        # Update camera y position
+        if self.player.y - self.camera_y < margin:
+            self.camera_y = self.player.y - margin
+        elif self.player.y - self.camera_y > self.height - margin:
+            self.camera_y = self.player.y - (self.height - margin)
+
+        # Keep camera within map bounds
+        self.camera_x = max(0, min(self.camera_x, self.map.width - self.width))
+        self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -105,17 +141,24 @@ class Game:
                         dx /= length
                         dy /= length
                         self.player.move(dx, dy, self.map.walls)
+                        self.update_camera()
                 self.last_mouse_pos = current_pos
 
     def draw(self):
         # Clear the screen
         self.screen.fill((34, 139, 34))  # Green background (grass)
 
-        # Draw the map
-        self.map.draw(self.screen)
+        # Draw the map (adjusting for camera position)
+        self.map.draw(self.screen, self.camera_x, self.camera_y)
 
-        # Draw the player
-        pygame.draw.rect(self.screen, (255, 0, 0), self.player.rect)
+        # Draw the player (adjusted for camera position)
+        player_screen_x = self.player.x - self.camera_x
+        player_screen_y = self.player.y - self.camera_y
+        pygame.draw.rect(self.screen, (255, 0, 0),
+                        (player_screen_x - self.player.size/2,
+                         player_screen_y - self.player.size/2,
+                         self.player.size,
+                         self.player.size))
 
         # Update the display
         pygame.display.flip()
