@@ -164,15 +164,19 @@ class Game:
             elif event.type == pygame.MOUSEMOTION and self.dragging:
                 current_pos = pygame.mouse.get_pos()
                 if self.last_mouse_pos:
-                    dx = current_pos[0] - self.last_mouse_pos[0]
-                    dy = current_pos[1] - self.last_mouse_pos[1]
+                    # Calculate direction based on screen position relative to player
+                    screen_center_x = self.width / 2
+                    screen_center_y = self.height / 2
+                    dx = (current_pos[0] - screen_center_x) / screen_center_x
+                    dy = (current_pos[1] - screen_center_y) / screen_center_y
+
+                    # Normalize the vector
                     length = math.sqrt(dx * dx + dy * dy)
                     if length > 0:
                         dx /= length
                         dy /= length
                         self.player.move(dx, dy, self.map.walls)
                         self.update_camera()
-                self.last_mouse_pos = current_pos
 
     def draw(self):
         # Clear the screen
