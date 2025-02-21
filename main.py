@@ -79,6 +79,35 @@ class Map:
             if wall_view.colliderect(screen.get_rect()):
                 pygame.draw.rect(screen, (100, 100, 100), wall_view)
 
+    def draw_minimap(self, screen, player_x, player_y):
+        # Draw minimap in top-right corner
+        minimap_size = 150
+        margin = 10
+        scale = minimap_size / max(self.width, self.height)
+
+        # Draw minimap background
+        minimap_rect = pygame.Rect(screen.get_width() - minimap_size - margin, 
+                                 margin, minimap_size, minimap_size)
+        pygame.draw.rect(screen, (0, 0, 0), minimap_rect)
+
+        # Draw roads on minimap
+        for road in self.roads:
+            mini_road = pygame.Rect(
+                screen.get_width() - minimap_size - margin + road.x * scale,
+                margin + road.y * scale,
+                road.width * scale,
+                road.height * scale
+            )
+            pygame.draw.rect(screen, (100, 100, 100), mini_road)
+
+        # Draw player on minimap
+        player_pos = (
+            screen.get_width() - minimap_size - margin + player_x * scale,
+            margin + player_y * scale
+        )
+        pygame.draw.circle(screen, (255, 0, 0), 
+                         (int(player_pos[0]), int(player_pos[1])), 3)
+
 class Game:
     def __init__(self):
         self.width = 800
@@ -88,11 +117,12 @@ class Game:
 
         # Create game objects
         self.map = Map()
-        self.player = Player(self.width/2, self.height/2)
+        # Start player in center of map
+        self.player = Player(self.map.width/2, self.map.height/2)
 
-        # Camera position (top-left corner of the view)
-        self.camera_x = 0
-        self.camera_y = 0
+        # Initialize camera to center on player
+        self.camera_x = self.player.x - self.width/2
+        self.camera_y = self.player.y - self.height/2
 
         # Game state
         self.running = True
@@ -159,6 +189,9 @@ class Game:
                          player_screen_y - self.player.size/2,
                          self.player.size,
                          self.player.size))
+
+        # Draw minimap
+        self.map.draw_minimap(self.screen, self.player.x, self.player.y)
 
         # Update the display
         pygame.display.flip()
