@@ -1,106 +1,82 @@
-import scene
-import sound
+import pygame
 from player import Player
 from npc import NPC
 from map import GameMap
-import ui
 
-class GameScene(scene.Scene):
-    def setup(self):
-        # Set up the game scene
-        self.background_color = '#333333'
-        
+class GameScene:
+    def __init__(self, screen):
+        self.screen = screen
+        self.background_color = (51, 51, 51)
+
         # Initialize game map
-        self.game_map = GameMap()
-        
+        self.game_map = GameMap(screen)
+
         # Initialize player
-        self.player = Player(self.size.w / 2, self.size.h / 2)
-        
+        screen_rect = screen.get_rect()
+        self.player = Player(screen_rect.centerx, screen_rect.centery)
+
         # Initialize NPCs
         self.npcs = [
             NPC(100, 100),
             NPC(200, 200),
             NPC(300, 300)
         ]
-        
-        # Touch controls
-        self.touch_start = None
-        self.joystick_center = None
-        self.joystick_current = None
-        
-        # Load sounds
-        sound.load_effect('footstep.wav')
-    
+
+        # Touch/mouse controls
+        self.moving = False
+        self.movement_target = None
+
     def update(self):
         # Update player position and state
         self.player.update()
-        
+
         # Update NPCs
         for npc in self.npcs:
             npc.update()
-        
+
         # Check collisions
         self.check_collisions()
-    
+
     def check_collisions(self):
         # Check player collision with map objects
         for wall in self.game_map.walls:
-            if self.player.frame.intersects(wall):
+            if self.player.rect.colliderect(wall):
                 self.player.handle_collision()
-        
+
         # Check player collision with NPCs
         for npc in self.npcs:
-            if self.player.frame.intersects(npc.frame):
+            if self.player.rect.colliderect(npc.rect):
                 self.player.handle_collision()
-    
+
     def draw(self):
-        # Clear the screen
-        scene.background(0, 0, 0)
-        
         # Draw map
-        self.game_map.draw()
-        
+        self.game_map.draw(self.screen)
+
         # Draw NPCs
         for npc in self.npcs:
-            npc.draw()
-        
+            npc.draw(self.screen)
+
         # Draw player
-        self.player.draw()
-        
-        # Draw touch controls
-        self.draw_controls()
-    
-    def draw_controls(self):
-        if self.joystick_center and self.joystick_current:
-            # Draw virtual joystick
-            scene.fill('#ffffff33')
-            scene.ellipse(self.joystick_center.x - 40,
-                         self.joystick_center.y - 40,
-                         80, 80)
-            scene.fill('#ffffff66')
-            scene.ellipse(self.joystick_current.x - 20,
-                         self.joystick_current.y - 20,
-                         40, 40)
-    
-    def touch_began(self, touch):
-        if touch.location.x < self.size.w / 2:
-            # Left side - movement control
-            self.joystick_center = touch.location
-            self.joystick_current = touch.location
-        else:
-            # Right side - action control
-            self.player.perform_action()
-    
-    def touch_moved(self, touch):
-        if self.joystick_center and touch.location.x < self.size.w / 2:
-            self.joystick_current = touch.location
-            # Calculate movement direction
-            dx = touch.location.x - self.joystick_center.x
-            dy = touch.location.y - self.joystick_center.y
-            self.player.move(dx / 50, dy / 50)
-    
-    def touch_ended(self, touch):
-        if touch.location.x < self.size.w / 2:
-            self.joystick_center = None
-            self.joystick_current = None
-            self.player.stop()
+        self.player.draw(self.screen)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # Set movement target
+            self.movement_target = event.pos
+            self.moving = True
+        elif event.type == pygame.MOUSEBUTTONUP:
+            self.moving = False
+        elif event.type == pygame.KEYDOWN:
+            # Handle keyboard controls
+            if event.key == pygame.K_SPACE:
+                self.player.perform_action()
+        elif event.type == pygame.KEYUP:
+            if event.key in (pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d):
+                self.player.stop()
+
+        # Handle continuous keyboard input
+        keys = pygame.key.get_pressed()
+        dx = (keys[pygame.K_d] - keys[pygame.K_a]) * self.player.speed
+        dy = (keys[pygame.K_s] - keys[pygame.K_w]) * self.player.speed
+        if dx != 0 or dy != 0:
+            self.player.move(dx, dy)
