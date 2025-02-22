@@ -129,9 +129,10 @@ class Player:
         self.animation_frame = 0
         self.animation_speed = 0.2
         self.colors = {
-            'body': (255, 0, 0),
-            'head': (255, 200, 150),
-            'legs': (0, 0, 255)
+            'skin': (255, 200, 150),    # Skin tone
+            'shirt': (200, 0, 0),       # Red shirt
+            'pants': (0, 0, 150),       # Dark blue pants
+            'shoes': (40, 40, 40)       # Dark shoes
         }
         self.in_vehicle = None
         self.vehicle_entry_cooldown = 0
@@ -176,46 +177,80 @@ class Player:
         screen_x = self.x - camera_x
         screen_y = self.y - camera_y
 
-        # Create a surface for the character that supports transparency
+        # Create a surface for the character with transparency
         char_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
 
-        # Draw basic animated character on the surface
-        # Body
-        body_rect = pygame.Rect(
-            self.size/2,
-            self.size/2,
-            self.size,
-            self.size
-        )
-        pygame.draw.rect(char_surface, self.colors['body'], body_rect)
+        # Animation offset for walking
+        anim_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
 
-        # Head
-        head_size = self.size // 2
-        head_y_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
+        # Draw character from top-down perspective
+        # Head (circle)
+        head_size = self.size * 0.4
         pygame.draw.circle(
             char_surface,
-            self.colors['head'],
-            (int(self.size + self.size/2), int(self.size/2 + head_y_offset)),
-            head_size // 2
+            self.colors['skin'],
+            (self.size, self.size - head_size),
+            head_size
         )
 
-        # Legs animation
-        if self.moving:
-            leg_offset = math.sin(self.animation_frame * math.pi) * 5
-            # Left leg
-            pygame.draw.rect(char_surface, self.colors['legs'],
-                           (self.size + self.size/4 - 2,
-                            self.size + self.size/4,
-                            4,
-                            self.size/2 + leg_offset))
-            # Right leg
-            pygame.draw.rect(char_surface, self.colors['legs'],
-                           (self.size + self.size*3/4 - 2,
-                            self.size + self.size/4,
-                            4,
-                            self.size/2 - leg_offset))
+        # Body (oval-like shape)
+        body_points = [
+            (self.size - self.size * 0.3, self.size - head_size * 0.5),  # Top left
+            (self.size + self.size * 0.3, self.size - head_size * 0.5),  # Top right
+            (self.size + self.size * 0.4, self.size + self.size * 0.3),  # Bottom right
+            (self.size - self.size * 0.4, self.size + self.size * 0.3)   # Bottom left
+        ]
+        pygame.draw.polygon(char_surface, self.colors['shirt'], body_points)
 
-        # Flip the surface if facing left
+        # Legs
+        if self.moving:
+            leg_offset = math.sin(self.animation_frame * math.pi) * 3
+            # Left leg
+            left_leg = [
+                (self.size - self.size * 0.25, self.size + self.size * 0.3),
+                (self.size - self.size * 0.15, self.size + self.size * 0.3),
+                (self.size - self.size * 0.2 + leg_offset, self.size + self.size * 0.6),
+                (self.size - self.size * 0.3 + leg_offset, self.size + self.size * 0.6)
+            ]
+            # Right leg
+            right_leg = [
+                (self.size + self.size * 0.15, self.size + self.size * 0.3),
+                (self.size + self.size * 0.25, self.size + self.size * 0.3),
+                (self.size + self.size * 0.3 - leg_offset, self.size + self.size * 0.6),
+                (self.size + self.size * 0.2 - leg_offset, self.size + self.size * 0.6)
+            ]
+            pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
+            pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
+
+            # Shoes
+            pygame.draw.circle(char_surface, self.colors['shoes'],
+                             (self.size - self.size * 0.25 + leg_offset, self.size + self.size * 0.6), 3)
+            pygame.draw.circle(char_surface, self.colors['shoes'],
+                             (self.size + self.size * 0.25 - leg_offset, self.size + self.size * 0.6), 3)
+        else:
+            # Standing still legs
+            left_leg = [
+                (self.size - self.size * 0.25, self.size + self.size * 0.3),
+                (self.size - self.size * 0.15, self.size + self.size * 0.3),
+                (self.size - self.size * 0.2, self.size + self.size * 0.6),
+                (self.size - self.size * 0.3, self.size + self.size * 0.6)
+            ]
+            right_leg = [
+                (self.size + self.size * 0.15, self.size + self.size * 0.3),
+                (self.size + self.size * 0.25, self.size + self.size * 0.3),
+                (self.size + self.size * 0.3, self.size + self.size * 0.6),
+                (self.size + self.size * 0.2, self.size + self.size * 0.6)
+            ]
+            pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
+            pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
+
+            # Shoes
+            pygame.draw.circle(char_surface, self.colors['shoes'],
+                             (self.size - self.size * 0.25, self.size + self.size * 0.6), 3)
+            pygame.draw.circle(char_surface, self.colors['shoes'],
+                             (self.size + self.size * 0.25, self.size + self.size * 0.6), 3)
+
+        # Apply character direction
         if self.direction == 'left':
             char_surface = pygame.transform.flip(char_surface, True, False)
 
