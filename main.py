@@ -3,6 +3,16 @@ import math
 import sys
 import random
 import os
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Set SDL environment variables for better compatibility
+os.environ['SDL_VIDEODRIVER'] = 'dummy'
+os.environ['SDL_AUDIODRIVER'] = 'dummy'
+os.environ['SDL_RENDER_DRIVER'] = 'software'
 
 class Vehicle:
     def __init__(self, x, y):
@@ -509,37 +519,43 @@ class Map:
 
 class Game:
     def __init__(self):
-        # Try different SDL video drivers
-        drivers = ['x11', 'fbcon', 'directfb', 'svgalib']
-        found = False
+        try:
+            logger.info("Initializing Pygame...")
+            pygame.init()
 
-        for driver in drivers:
-            os.environ['SDL_VIDEODRIVER'] = driver
+            logger.info("Setting up display...")
+            self.width = 800
+            self.height = 600
+
+            # Try to create the display with software rendering
             try:
-                pygame.display.init()
-                found = True
-                break
-            except pygame.error:
-                continue
+                self.screen = pygame.display.set_mode(
+                    (self.width, self.height),
+                    pygame.SWSURFACE | pygame.HWSURFACE
+                )
+            except pygame.error as e:
+                logger.error(f"Failed to create display: {e}")
+                # Fallback to minimal display mode
+                self.screen = pygame.display.set_mode(
+                    (self.width, self.height),
+                    pygame.SWSURFACE
+                )
 
-        if not found:
-            os.environ['SDL_VIDEODRIVER'] = 'dummy'
-            pygame.display.init()
+            pygame.display.set_caption("GTA Style Game")
+            logger.info("Display setup complete")
 
-        self.width = 800
-        self.height = 600
-        self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("GTA Style Game")
+            self.map = Map()
+            self.player = Player(self.map.width/2, self.map.height/2)
+            self.camera_x = self.player.x - self.width/2
+            self.camera_y = self.player.y - self.height/2
+            self.running = True
+            self.dragging = False
+            self.last_mouse_pos = None
 
-        self.map = Map()
-        self.player = Player(self.map.width/2, self.map.height/2)
-
-        self.camera_x = self.player.x - self.width/2
-        self.camera_y = self.player.y - self.height/2
-
-        self.running = True
-        self.dragging = False
-        self.last_mouse_pos = None
+        except Exception as e:
+            logger.error(f"Failed to initialize game: {e}")
+            pygame.quit()
+            sys.exit(1)
 
     def update_camera(self):
         margin = 200
@@ -608,6 +624,5 @@ class Game:
         sys.exit()
 
 if __name__ == '__main__':
-    pygame.init()
     game = Game()
     game.run()
