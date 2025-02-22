@@ -11,10 +11,32 @@ class Player:
         self.speed = 5
         self.size = 32
         self.rect = pygame.Rect(x - self.size/2, y - self.size/2, self.size, self.size)
+        self.direction = 'down'  # Current facing direction
+        self.moving = False
+        self.animation_frame = 0
+        self.animation_speed = 0.2
+        self.colors = {
+            'body': (255, 0, 0),
+            'head': (255, 200, 150),
+            'legs': (0, 0, 255)
+        }
 
     def move(self, dx, dy, walls):
         new_x = self.x + dx * self.speed
         new_y = self.y + dy * self.speed
+
+        # Update direction based on movement
+        if abs(dx) > abs(dy):
+            self.direction = 'right' if dx > 0 else 'left'
+        else:
+            self.direction = 'down' if dy > 0 else 'up'
+
+        # Update moving state and animation
+        self.moving = dx != 0 or dy != 0
+        if self.moving:
+            self.animation_frame = (self.animation_frame + self.animation_speed) % 4
+        else:
+            self.animation_frame = 0
 
         # Update rectangle position for collision detection
         new_rect = pygame.Rect(new_x - self.size/2, new_y - self.size/2, self.size, self.size)
@@ -30,6 +52,46 @@ class Player:
             self.x = new_x
             self.y = new_y
             self.rect = new_rect
+
+    def draw(self, screen, camera_x, camera_y):
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # Draw basic animated character
+        # Body
+        body_rect = pygame.Rect(
+            screen_x - self.size/2,
+            screen_y - self.size/2,
+            self.size,
+            self.size
+        )
+        pygame.draw.rect(screen, self.colors['body'], body_rect)
+
+        # Head
+        head_size = self.size // 2
+        head_y_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
+        pygame.draw.circle(
+            screen,
+            self.colors['head'],
+            (int(screen_x), int(screen_y - self.size/2 + head_y_offset)),
+            head_size // 2
+        )
+
+        # Legs animation
+        if self.moving:
+            leg_offset = math.sin(self.animation_frame * math.pi) * 5
+            # Left leg
+            pygame.draw.rect(screen, self.colors['legs'],
+                           (screen_x - self.size/4 - 2,
+                            screen_y + self.size/4,
+                            4,
+                            self.size/2 + leg_offset))
+            # Right leg
+            pygame.draw.rect(screen, self.colors['legs'],
+                           (screen_x + self.size/4 - 2,
+                            screen_y + self.size/4,
+                            4,
+                            self.size/2 - leg_offset))
 
 class Map:
     def __init__(self):
@@ -195,14 +257,8 @@ class Game:
         # Draw the map (adjusting for camera position)
         self.map.draw(self.screen, self.camera_x, self.camera_y)
 
-        # Draw the player (adjusted for camera position)
-        player_screen_x = self.player.x - self.camera_x
-        player_screen_y = self.player.y - self.camera_y
-        pygame.draw.rect(self.screen, (255, 0, 0),
-                        (player_screen_x - self.player.size/2,
-                         player_screen_y - self.player.size/2,
-                         self.player.size,
-                         self.player.size))
+        # Draw the player with animations
+        self.player.draw(self.screen, self.camera_x, self.camera_y)
 
         # Draw minimap
         self.map.draw_minimap(self.screen, self.player.x, self.player.y)
