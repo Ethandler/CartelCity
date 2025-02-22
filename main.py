@@ -142,6 +142,58 @@ class Player:
             self.y = new_y
             self.rect = new_rect
 
+    def draw(self, screen, camera_x, camera_y):
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+
+        # Create a surface for the character that supports transparency
+        char_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+
+        # Draw basic animated character on the surface
+        # Body
+        body_rect = pygame.Rect(
+            self.size/2,
+            self.size/2,
+            self.size,
+            self.size
+        )
+        pygame.draw.rect(char_surface, self.colors['body'], body_rect)
+
+        # Head
+        head_size = self.size // 2
+        head_y_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
+        pygame.draw.circle(
+            char_surface,
+            self.colors['head'],
+            (int(self.size + self.size/2), int(self.size/2 + head_y_offset)),
+            head_size // 2
+        )
+
+        # Legs animation
+        if self.moving:
+            leg_offset = math.sin(self.animation_frame * math.pi) * 5
+            # Left leg
+            pygame.draw.rect(char_surface, self.colors['legs'],
+                           (self.size + self.size/4 - 2,
+                            self.size + self.size/4,
+                            4,
+                            self.size/2 + leg_offset))
+            # Right leg
+            pygame.draw.rect(char_surface, self.colors['legs'],
+                           (self.size + self.size*3/4 - 2,
+                            self.size + self.size/4,
+                            4,
+                            self.size/2 - leg_offset))
+
+        # Flip the surface if facing left
+        if self.direction == 'left':
+            char_surface = pygame.transform.flip(char_surface, True, False)
+
+        # Draw the character surface onto the screen
+        screen.blit(char_surface, 
+                   (screen_x - char_surface.get_width()/2,
+                    screen_y - char_surface.get_height()/2))
+
     def enter_exit_vehicle(self, vehicles):
         if self.vehicle_entry_cooldown > 0:
             return
@@ -164,47 +216,6 @@ class Player:
     def update(self):
         if self.vehicle_entry_cooldown > 0:
             self.vehicle_entry_cooldown -= 1
-
-    def draw(self, screen, camera_x, camera_y):
-        screen_x = self.x - camera_x
-        screen_y = self.y - camera_y
-
-        # Draw basic animated character
-        # Body
-        body_rect = pygame.Rect(
-            screen_x - self.size/2,
-            screen_y - self.size/2,
-            self.size,
-            self.size
-        )
-        pygame.draw.rect(screen, self.colors['body'], body_rect)
-
-        # Head
-        head_size = self.size // 2
-        head_y_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
-        pygame.draw.circle(
-            screen,
-            self.colors['head'],
-            (int(screen_x), int(screen_y - self.size/2 + head_y_offset)),
-            head_size // 2
-        )
-
-        # Legs animation
-        if self.moving:
-            leg_offset = math.sin(self.animation_frame * math.pi) * 5
-            # Left leg
-            pygame.draw.rect(screen, self.colors['legs'],
-                           (screen_x - self.size/4 - 2,
-                            screen_y + self.size/4,
-                            4,
-                            self.size/2 + leg_offset))
-            # Right leg
-            pygame.draw.rect(screen, self.colors['legs'],
-                           (screen_x + self.size/4 - 2,
-                            screen_y + self.size/4,
-                            4,
-                            self.size/2 - leg_offset))
-
 
 class Map:
     def __init__(self):
