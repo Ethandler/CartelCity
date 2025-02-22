@@ -2,6 +2,7 @@ import pygame
 import math
 import sys
 import random
+import os
 
 class Player:
     def __init__(self, x, y):
@@ -110,6 +111,9 @@ class Map:
 
 class Game:
     def __init__(self):
+        # Set SDL variables for Replit environment
+        os.environ['SDL_VIDEODRIVER'] = 'x11'
+
         self.width = 800
         self.height = 600
         self.screen = pygame.display.set_mode((self.width, self.height))
@@ -123,6 +127,9 @@ class Game:
         # Initialize camera to center on player
         self.camera_x = self.player.x - self.width/2
         self.camera_y = self.player.y - self.height/2
+
+        print(f"Initial player position: ({self.player.x}, {self.player.y})")
+        print(f"Initial camera position: ({self.camera_x}, {self.camera_y})")
 
         # Game state
         self.running = True
@@ -148,6 +155,9 @@ class Game:
         # Keep camera within map bounds
         self.camera_x = max(0, min(self.camera_x, self.map.width - self.width))
         self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
+
+        print(f"Updated camera position: ({self.camera_x}, {self.camera_y})")
+        print(f"Player position: ({self.player.x}, {self.player.y})")
 
     def handle_events(self):
         for event in pygame.event.get():
