@@ -54,16 +54,37 @@ class Vehicle:
             self.rect = new_rect
 
     def draw(self, screen, camera_x, camera_y):
+        # Calculate screen position
         screen_x = self.x - camera_x
         screen_y = self.y - camera_y
 
-        # Create a surface for the rotated car
+        # Only draw if vehicle is on screen (with some margin)
+        screen_rect = screen.get_rect()
+        if (screen_x + self.size[0] < -50 or screen_x - self.size[0] > screen_rect.width + 50 or
+            screen_y + self.size[1] < -50 or screen_y - self.size[1] > screen_rect.height + 50):
+            return
+
+        # Create a surface for the rotated car with proper alpha
         car_surface = pygame.Surface(self.size, pygame.SRCALPHA)
+
+        # Draw the vehicle body
         pygame.draw.rect(car_surface, self.color, (0, 0, self.size[0], self.size[1]))
+        # Add windows (black rectangles)
+        window_color = (30, 30, 30)
+        window_width = self.size[0] // 4
+        window_height = self.size[1] // 2
+        # Front window
+        pygame.draw.rect(car_surface, window_color, 
+                        (self.size[0] - window_width - 4, 2, window_width, window_height))
+        # Back window
+        pygame.draw.rect(car_surface, window_color,
+                        (4, 2, window_width, window_height))
 
         # Rotate the surface
         rotated_surface = pygame.transform.rotate(car_surface, -self.rotation)
-        screen.blit(rotated_surface, (screen_x - rotated_surface.get_width()/2, 
+
+        # Draw the rotated vehicle
+        screen.blit(rotated_surface, (screen_x - rotated_surface.get_width()/2,
                                     screen_y - rotated_surface.get_height()/2))
 
 class Player:
@@ -191,7 +212,7 @@ class Map:
         self.roads = []
         self.vehicles = []
         self.create_city_layout()
-        self.spawn_vehicles(5)  # Spawn initial vehicles
+        self.spawn_vehicles(10)  # Increased number of vehicles for better visibility
 
     def create_city_layout(self):
         # Create a grid of roads
@@ -264,11 +285,28 @@ class Map:
     def spawn_vehicles(self, count):
         for _ in range(count):
             # Find a random road
+            if not self.roads:  # Safety check
+                return
+
             road = random.choice(self.roads)
-            # Spawn vehicle at random position on road
-            x = road.x + random.randint(0, road.width)
-            y = road.y + random.randint(0, road.height)
-            self.vehicles.append(Vehicle(x, y))
+
+            # Determine if road is horizontal or vertical
+            is_horizontal = road.width > road.height
+
+            if is_horizontal:
+                # Place vehicle along horizontal road
+                x = road.x + random.randint(0, road.width - 48)  # Account for vehicle width
+                y = road.y + road.height // 2  # Center in road
+                rotation = 0 if random.random() > 0.5 else 180  # Face left or right
+            else:
+                # Place vehicle along vertical road
+                x = road.x + road.width // 2  # Center in road
+                y = road.y + random.randint(0, road.height - 48)  # Account for vehicle length
+                rotation = 90 if random.random() > 0.5 else 270  # Face up or down
+
+            vehicle = Vehicle(x, y)
+            vehicle.rotation = rotation  # Set initial rotation based on road direction
+            self.vehicles.append(vehicle)
 
 
 class Game:
