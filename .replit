@@ -24,10 +24,11 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python main.py"
+args = "python3 -m pygbag --port 8000 --bind 0.0.0.0 test.py"
+waitForPort = 8000
 
 [deployment]
-run = ["sh", "-c", "python main.py"]
+run = ["sh", "-c", "python3 -m pygbag --port 8000 --bind 0.0.0.0 test.py"]
 
 [nix]
 channel = "stable-24_05"

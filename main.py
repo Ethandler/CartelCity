@@ -3,16 +3,16 @@ import math
 import sys
 import random
 import os
+import asyncio
 import logging
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Set SDL environment variables for better compatibility
-os.environ['SDL_VIDEODRIVER'] = 'dummy'
-os.environ['SDL_AUDIODRIVER'] = 'dummy'
-os.environ['SDL_RENDER_DRIVER'] = 'software'
+# Initialize only the required Pygame modules
+pygame.display.init()
+pygame.font.init()
 
 class Vehicle:
     def __init__(self, x, y):
@@ -520,27 +520,12 @@ class Map:
 class Game:
     def __init__(self):
         try:
-            logger.info("Initializing Pygame...")
-            pygame.init()
-
-            logger.info("Setting up display...")
+            logger.info("Initializing game display...")
             self.width = 800
             self.height = 600
 
-            # Try to create the display with software rendering
-            try:
-                self.screen = pygame.display.set_mode(
-                    (self.width, self.height),
-                    pygame.SWSURFACE | pygame.HWSURFACE
-                )
-            except pygame.error as e:
-                logger.error(f"Failed to create display: {e}")
-                # Fallback to minimal display mode
-                self.screen = pygame.display.set_mode(
-                    (self.width, self.height),
-                    pygame.SWSURFACE
-                )
-
+            # Initialize display without any special flags
+            self.screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption("GTA Style Game")
             logger.info("Display setup complete")
 
@@ -602,27 +587,24 @@ class Game:
 
     def draw(self):
         self.screen.fill((34, 139, 34))
-
         self.map.draw(self.screen, self.camera_x, self.camera_y)
 
         if not self.player.in_vehicle:
             self.player.draw(self.screen, self.camera_x, self.camera_y)
 
         self.map.draw_minimap(self.screen, self.player.x, self.player.y)
-
         pygame.display.flip()
 
-    def run(self):
-        clock = pygame.time.Clock()
-        while self.running:
-            self.player.update()
-            self.handle_events()
-            self.draw()
-            clock.tick(60)
+async def main():
+    game = Game()
+    clock = pygame.time.Clock()
 
-        pygame.quit()
-        sys.exit()
+    while game.running:
+        game.player.update()
+        game.handle_events()
+        game.draw()
+        clock.tick(60)
+        await asyncio.sleep(0)  # Allow other async operations
 
 if __name__ == '__main__':
-    game = Game()
-    game.run()
+    asyncio.run(main())
