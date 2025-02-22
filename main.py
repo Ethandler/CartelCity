@@ -25,15 +25,22 @@ class Vehicle:
         ])
 
     def move(self, forward, turn, walls):
-        # Update speed based on acceleration
-        if forward:
-            self.speed = min(self.speed + self.acceleration, self.max_speed)
-        elif self.speed > 0:
-            self.speed = max(0, self.speed - self.acceleration)
+        # Update speed based on acceleration and direction
+        if forward != 0:  # Using forward as a value (-1 for reverse, 1 for forward)
+            target_speed = forward * self.max_speed
+            self.speed = min(max(self.speed + (self.acceleration * forward), -self.max_speed), self.max_speed)
+        else:
+            # Apply gradual deceleration when no forward/backward input
+            if abs(self.speed) > self.acceleration:
+                self.speed -= (self.acceleration * (1 if self.speed > 0 else -1))
+            else:
+                self.speed = 0
 
-        # Update rotation
+        # Update rotation with speed-dependent turning
         if turn:
-            self.rotation += turn * (3 if self.speed > 0 else 0)
+            # Reduce turn rate at higher speeds
+            turn_rate = 3 * (1 - (abs(self.speed) / self.max_speed) * 0.5)
+            self.rotation += turn * turn_rate
             self.rotation %= 360
 
         # Calculate movement vector
@@ -484,10 +491,10 @@ class Game:
             self.player.move(dx, dy, self.map.walls)
             self.update_camera()
         else:
-            # Vehicle controls remain unchanged
+            # Vehicle controls
             keys = pygame.key.get_pressed()
-            forward = keys[pygame.K_w] - keys[pygame.K_s]
-            turn = keys[pygame.K_d] - keys[pygame.K_a]
+            forward = keys[pygame.K_w] - keys[pygame.K_s]  # 1 for W, -1 for S, 0 for neither
+            turn = keys[pygame.K_d] - keys[pygame.K_a]  # 1 for D, -1 for A, 0 for neither
             self.player.in_vehicle.move(forward, turn, self.map.walls)
             # Update player position to match vehicle
             self.player.x = self.player.in_vehicle.x
