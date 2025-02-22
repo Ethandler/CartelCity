@@ -1,5 +1,9 @@
 {pkgs}: {
   deps = [
+    pkgs.libGL
+    pkgs.mesa
+    pkgs.xorg.libXext
+    pkgs.xorg.libX11
     pkgs.portmidi
     pkgs.pkg-config
     pkgs.libpng
