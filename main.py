@@ -105,26 +105,29 @@ class Player:
         }
         self.in_vehicle = None
         self.vehicle_entry_cooldown = 0
-        self.size = 32  # Keep existing attributes...
 
     def move(self, dx, dy, walls):
+        # Update direction based on movement
+        if dx != 0 or dy != 0:  # Only update direction if there's movement
+            if abs(dx) > abs(dy):
+                self.direction = 'right' if dx > 0 else 'left'
+            else:
+                self.direction = 'down' if dy > 0 else 'up'
+            self.moving = True
+        else:
+            self.moving = False
+
+        # Calculate new position
         new_x = self.x + dx * self.speed
         new_y = self.y + dy * self.speed
 
-        # Update direction based on movement
-        if abs(dx) > abs(dy):
-            self.direction = 'right' if dx > 0 else 'left'
-        else:
-            self.direction = 'down' if dy > 0 else 'up'
-
-        # Update moving state and animation
-        self.moving = dx != 0 or dy != 0
+        # Update animation
         if self.moving:
             self.animation_frame = (self.animation_frame + self.animation_speed) % 4
         else:
             self.animation_frame = 0
 
-        # Update rectangle position for collision detection
+        # Update rectangle for collision detection
         new_rect = pygame.Rect(new_x - self.size/2, new_y - self.size/2, self.size, self.size)
 
         # Check collision with walls
@@ -138,6 +141,29 @@ class Player:
             self.x = new_x
             self.y = new_y
             self.rect = new_rect
+
+    def enter_exit_vehicle(self, vehicles):
+        if self.vehicle_entry_cooldown > 0:
+            return
+
+        if self.in_vehicle:
+            # Exit vehicle
+            self.x = self.in_vehicle.x + math.cos(math.radians(self.in_vehicle.rotation)) * 40
+            self.y = self.in_vehicle.y + math.sin(math.radians(self.in_vehicle.rotation)) * 40
+            self.in_vehicle = None
+            self.vehicle_entry_cooldown = 30
+        else:
+            # Try to enter nearest vehicle
+            for vehicle in vehicles:
+                dist = math.sqrt((self.x - vehicle.x)**2 + (self.y - vehicle.y)**2)
+                if dist < 50:  # Entry range
+                    self.in_vehicle = vehicle
+                    self.vehicle_entry_cooldown = 30
+                    break
+
+    def update(self):
+        if self.vehicle_entry_cooldown > 0:
+            self.vehicle_entry_cooldown -= 1
 
     def draw(self, screen, camera_x, camera_y):
         screen_x = self.x - camera_x
@@ -179,28 +205,6 @@ class Player:
                             4,
                             self.size/2 - leg_offset))
 
-    def enter_exit_vehicle(self, vehicles):
-        if self.vehicle_entry_cooldown > 0:
-            return
-
-        if self.in_vehicle:
-            # Exit vehicle
-            self.x = self.in_vehicle.x + math.cos(math.radians(self.in_vehicle.rotation)) * 40
-            self.y = self.in_vehicle.y + math.sin(math.radians(self.in_vehicle.rotation)) * 40
-            self.in_vehicle = None
-            self.vehicle_entry_cooldown = 30
-        else:
-            # Try to enter nearest vehicle
-            for vehicle in vehicles:
-                dist = math.sqrt((self.x - vehicle.x)**2 + (self.y - vehicle.y)**2)
-                if dist < 50:  # Entry range
-                    self.in_vehicle = vehicle
-                    self.vehicle_entry_cooldown = 30
-                    break
-
-    def update(self):
-        if self.vehicle_entry_cooldown > 0:
-            self.vehicle_entry_cooldown -= 1
 
 class Map:
     def __init__(self):
@@ -212,9 +216,7 @@ class Map:
         self.roads = []
         self.vehicles = []
         self.create_city_layout()
-        print(f"Created {len(self.roads)} roads")  # Debug print
         self.spawn_vehicles(10)  # Increased number of vehicles for better visibility
-        print(f"Spawned {len(self.vehicles)} vehicles")  # Debug print
 
     def create_city_layout(self):
         # Create a grid of roads
@@ -225,13 +227,11 @@ class Map:
         for y in range(0, self.height, block_size):
             road = pygame.Rect(0, y, self.width, road_width)
             self.roads.append(road)
-            print(f"Added horizontal road at y={y}")  # Debug print
 
         # Create vertical roads
         for x in range(0, self.width, block_size):
             road = pygame.Rect(x, 0, road_width, self.height)
             self.roads.append(road)
-            print(f"Added vertical road at x={x}")  # Debug print
 
         # Create buildings in blocks
         for block_x in range(road_width, self.width - road_width, block_size):
@@ -259,10 +259,9 @@ class Map:
             if wall_view.colliderect(screen.get_rect()):
                 pygame.draw.rect(screen, (100, 100, 100), wall_view)
 
-        # Draw vehicles (moved from Game class to ensure proper rendering order)
+        # Draw vehicles
         for vehicle in self.vehicles:
             vehicle.draw(screen, camera_x, camera_y)
-            print(f"Drawing vehicle at ({vehicle.x}, {vehicle.y}) with rotation {vehicle.rotation}")  # Debug print
 
     def draw_minimap(self, screen, player_x, player_y):
         # Draw minimap in top-right corner
@@ -372,16 +371,21 @@ class Game:
                 if event.key == pygame.K_e:
                     self.player.enter_exit_vehicle(self.map.vehicles)
 
-            # Handle existing mouse events only when not in vehicle
-            elif not self.player.in_vehicle:
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    self.dragging = True
-                    self.last_mouse_pos = pygame.mouse.get_pos()
-                elif event.type == pygame.MOUSEBUTTONUP:
-                    self.dragging = False
+        # Handle player movement with WASD keys
+        if not self.player.in_vehicle:
+            keys = pygame.key.get_pressed()
+            dx = keys[pygame.K_d] - keys[pygame.K_a]  # Right - Left
+            dy = keys[pygame.K_s] - keys[pygame.K_w]  # Down - Up
 
-        # Handle vehicle controls
-        if self.player.in_vehicle:
+            # Normalize diagonal movement
+            if dx != 0 and dy != 0:
+                dx *= 0.7071  # 1/√2
+                dy *= 0.7071
+
+            self.player.move(dx, dy, self.map.walls)
+            self.update_camera()
+        else:
+            # Vehicle controls remain unchanged
             keys = pygame.key.get_pressed()
             forward = keys[pygame.K_w] - keys[pygame.K_s]
             turn = keys[pygame.K_d] - keys[pygame.K_a]
@@ -389,22 +393,6 @@ class Game:
             # Update player position to match vehicle
             self.player.x = self.player.in_vehicle.x
             self.player.y = self.player.in_vehicle.y
-        elif self.dragging:  # Only handle mouse movement when not in vehicle
-            current_pos = pygame.mouse.get_pos()
-            if self.last_mouse_pos:
-                # Calculate direction based on screen position relative to player
-                screen_center_x = self.width / 2
-                screen_center_y = self.height / 2
-                dx = (current_pos[0] - screen_center_x) / screen_center_x
-                dy = (current_pos[1] - screen_center_y) / screen_center_y
-
-                # Normalize the vector
-                length = math.sqrt(dx * dx + dy * dy)
-                if length > 0:
-                    dx /= length
-                    dy /= length
-                    self.player.move(dx, dy, self.map.walls)
-                    self.update_camera()
 
     def draw(self):
         # Clear the screen
