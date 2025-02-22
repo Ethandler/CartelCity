@@ -509,7 +509,22 @@ class Map:
 
 class Game:
     def __init__(self):
-        os.environ['SDL_VIDEODRIVER'] = 'x11'
+        # Try different SDL video drivers
+        drivers = ['x11', 'fbcon', 'directfb', 'svgalib']
+        found = False
+
+        for driver in drivers:
+            os.environ['SDL_VIDEODRIVER'] = driver
+            try:
+                pygame.display.init()
+                found = True
+                break
+            except pygame.error:
+                continue
+
+        if not found:
+            os.environ['SDL_VIDEODRIVER'] = 'dummy'
+            pygame.display.init()
 
         self.width = 800
         self.height = 600
