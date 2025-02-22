@@ -1,7 +1,5 @@
 {pkgs}: {
   deps = [
-    pkgs.vulkan-loader
-    pkgs.xorg.xorgserver
     pkgs.libGL
     pkgs.mesa
     pkgs.xorg.libXext
