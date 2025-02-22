@@ -212,7 +212,9 @@ class Map:
         self.roads = []
         self.vehicles = []
         self.create_city_layout()
+        print(f"Created {len(self.roads)} roads")  # Debug print
         self.spawn_vehicles(10)  # Increased number of vehicles for better visibility
+        print(f"Spawned {len(self.vehicles)} vehicles")  # Debug print
 
     def create_city_layout(self):
         # Create a grid of roads
@@ -221,11 +223,15 @@ class Map:
 
         # Create horizontal roads
         for y in range(0, self.height, block_size):
-            self.roads.append(pygame.Rect(0, y, self.width, road_width))
+            road = pygame.Rect(0, y, self.width, road_width)
+            self.roads.append(road)
+            print(f"Added horizontal road at y={y}")  # Debug print
 
         # Create vertical roads
         for x in range(0, self.width, block_size):
-            self.roads.append(pygame.Rect(x, 0, road_width, self.height))
+            road = pygame.Rect(x, 0, road_width, self.height)
+            self.roads.append(road)
+            print(f"Added vertical road at x={x}")  # Debug print
 
         # Create buildings in blocks
         for block_x in range(road_width, self.width - road_width, block_size):
@@ -252,6 +258,11 @@ class Map:
             wall_view = pygame.Rect(wall.x - camera_x, wall.y - camera_y, wall.width, wall.height)
             if wall_view.colliderect(screen.get_rect()):
                 pygame.draw.rect(screen, (100, 100, 100), wall_view)
+
+        # Draw vehicles (moved from Game class to ensure proper rendering order)
+        for vehicle in self.vehicles:
+            vehicle.draw(screen, camera_x, camera_y)
+            print(f"Drawing vehicle at ({vehicle.x}, {vehicle.y}) with rotation {vehicle.rotation}")  # Debug print
 
     def draw_minimap(self, screen, player_x, player_y):
         # Draw minimap in top-right corner
@@ -401,10 +412,6 @@ class Game:
 
         # Draw the map (adjusting for camera position)
         self.map.draw(self.screen, self.camera_x, self.camera_y)
-
-        # Draw vehicles
-        for vehicle in self.map.vehicles:
-            vehicle.draw(self.screen, self.camera_x, self.camera_y)
 
         # Draw the player with animations
         if not self.player.in_vehicle:
