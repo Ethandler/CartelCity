@@ -51,7 +51,7 @@ class Vehicle:
         # Check collision
         can_move = True
         for wall in walls:
-            if new_rect.colliderect(wall):
+            if new_rect.colliderect(wall["rect"]):
                 can_move = False
                 self.speed = 0
                 break
@@ -225,6 +225,7 @@ class Player:
             # Exit vehicle
             self.x = self.in_vehicle.x + math.cos(math.radians(self.in_vehicle.rotation)) * 40
             self.y = self.in_vehicle.y + math.sin(math.radians(self.in_vehicle.rotation)) * 40
+            self.rect = pygame.Rect(self.x - self.size/2, self.y - self.size/2, self.size, self.size)
             self.in_vehicle = None
             self.vehicle_entry_cooldown = 30
         else:
@@ -248,6 +249,7 @@ class Map:
         self.walls = []
         self.roads = []
         self.vehicles = []
+        self.window_states = {}  # Store window lighting states
         self.create_city_layout()
         self.spawn_vehicles(15)
 
@@ -281,14 +283,22 @@ class Map:
                     y = block_y + random.randint(0, block_size - building_height - road_width)
 
                     # Create building with color and window information
+                    building_id = f"building_{x}_{y}"
                     self.walls.append({
                         "rect": pygame.Rect(x, y, building_width, building_height),
                         "color": random.choice(building_colors),
                         "windows": {
                             "rows": random.randint(2, 4),
                             "cols": random.randint(3, 5)
-                        }
+                        },
+                        "id": building_id
                     })
+
+                    # Initialize window states for this building
+                    if building_id not in self.window_states:
+                        self.window_states[building_id] = []
+                        for _ in range(16):  # Maximum possible windows
+                            self.window_states[building_id].append(random.random() < 0.3)
 
     def draw(self, screen, camera_x, camera_y):
         # Draw roads with lane markings
@@ -334,17 +344,20 @@ class Map:
                 # Draw building base
                 pygame.draw.rect(screen, wall["color"], wall_view)
 
-                # Draw windows
+                # Draw windows using persistent states
                 window_width = wall["rect"].width // (wall["windows"]["cols"] * 2)
                 window_height = wall["rect"].height // (wall["windows"]["rows"] * 2)
+                window_index = 0
                 for row in range(wall["windows"]["rows"]):
                     for col in range(wall["windows"]["cols"]):
-                        window_x = wall_view.x + (col * 2 + 1) * window_width
-                        window_y = wall_view.y + (row * 2 + 1) * window_height
-                        # Random window lighting
-                        window_color = (255, 255, 200) if random.random() < 0.3 else (30, 30, 30)
-                        pygame.draw.rect(screen, window_color,
-                                       (window_x, window_y, window_width * 0.8, window_height * 0.8))
+                        if window_index < len(self.window_states[wall["id"]]):
+                            window_x = wall_view.x + (col * 2 + 1) * window_width
+                            window_y = wall_view.y + (row * 2 + 1) * window_height
+                            # Use persistent window state
+                            window_color = (255, 255, 200) if self.window_states[wall["id"]][window_index] else (30, 30, 30)
+                            pygame.draw.rect(screen, window_color,
+                                           (window_x, window_y, window_width * 0.8, window_height * 0.8))
+                            window_index += 1
 
         # Draw vehicles
         for vehicle in self.vehicles:
