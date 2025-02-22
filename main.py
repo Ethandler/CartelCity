@@ -9,12 +9,20 @@ class Vehicle:
         self.x = x
         self.y = y
         self.speed = 0
-        self.max_speed = 6  # Slightly reduced for better control
+        self.max_speed = 6
         self.acceleration = 0.2
         self.rotation = 0
-        self.size = (32, 16)  # Reduced from 48x24 to 32x16
+        self.size = (32, 16)
         self.rect = pygame.Rect(x - self.size[0]/2, y - self.size[1]/2, self.size[0], self.size[1])
-        self.color = (random.randint(50, 255), random.randint(50, 255), random.randint(50, 255))
+        # More varied and realistic car colors
+        self.color = random.choice([
+            (200, 0, 0),    # Red
+            (0, 0, 200),    # Blue
+            (40, 40, 40),   # Dark Gray
+            (200, 200, 200),# Silver
+            (255, 255, 255),# White
+            (0, 100, 0),    # Dark Green
+        ])
 
     def move(self, forward, turn, walls):
         # Update speed based on acceleration
@@ -54,7 +62,6 @@ class Vehicle:
             self.rect = new_rect
 
     def draw(self, screen, camera_x, camera_y):
-        # Calculate screen position
         screen_x = self.x - camera_x
         screen_y = self.y - camera_y
 
@@ -69,16 +76,32 @@ class Vehicle:
 
         # Draw the vehicle body
         pygame.draw.rect(car_surface, self.color, (0, 0, self.size[0], self.size[1]))
-        # Add windows (black rectangles)
-        window_color = (30, 30, 30)
+
+        # Add windows (black rectangles with transparency)
+        window_color = (30, 30, 30, 200)
         window_width = self.size[0] // 4
         window_height = self.size[1] // 2
+
         # Front window
         pygame.draw.rect(car_surface, window_color, 
                         (self.size[0] - window_width - 4, 2, window_width, window_height))
         # Back window
         pygame.draw.rect(car_surface, window_color,
                         (4, 2, window_width, window_height))
+
+        # Add headlights and taillights
+        light_size = 3
+        if self.rotation in [0, 180]:  # Horizontal orientation
+            # Headlights (white)
+            pygame.draw.rect(car_surface, (255, 255, 200),
+                           (self.size[0] - light_size - 1, 2, light_size, light_size))
+            pygame.draw.rect(car_surface, (255, 255, 200),
+                           (self.size[0] - light_size - 1, self.size[1] - light_size - 2, light_size, light_size))
+            # Taillights (red)
+            pygame.draw.rect(car_surface, (255, 0, 0),
+                           (1, 2, light_size, light_size))
+            pygame.draw.rect(car_surface, (255, 0, 0),
+                           (1, self.size[1] - light_size - 2, light_size, light_size))
 
         # Rotate the surface
         rotated_surface = pygame.transform.rotate(car_surface, -self.rotation)
@@ -91,8 +114,8 @@ class Player:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.speed = 3  # Reduced speed to match smaller size
-        self.size = 16  # Reduced from 32 to 16
+        self.speed = 3
+        self.size = 16
         self.rect = pygame.Rect(x - self.size/2, y - self.size/2, self.size, self.size)
         self.direction = 'down'
         self.moving = False
@@ -133,7 +156,7 @@ class Player:
         # Check collision with walls
         can_move = True
         for wall in walls:
-            if new_rect.colliderect(wall):
+            if new_rect.colliderect(wall["rect"]): #Corrected this line
                 can_move = False
                 break
 
@@ -226,48 +249,102 @@ class Map:
         self.roads = []
         self.vehicles = []
         self.create_city_layout()
-        self.spawn_vehicles(15)  # Increased number of vehicles
+        self.spawn_vehicles(15)
 
     def create_city_layout(self):
-        # Create a grid of roads with wider streets
-        road_width = 96  # Increased from 64 to 96
-        block_size = 300  # Increased from 200 to 300
+        road_width = 96
+        block_size = 300
 
-        # Create horizontal roads
+        # Create roads with lane markings
         for y in range(0, self.height, block_size):
             road = pygame.Rect(0, y, self.width, road_width)
-            self.roads.append(road)
+            self.roads.append({"rect": road, "horizontal": True})
 
-        # Create vertical roads
         for x in range(0, self.width, block_size):
             road = pygame.Rect(x, 0, road_width, self.height)
-            self.roads.append(road)
+            self.roads.append({"rect": road, "horizontal": False})
 
-        # Create larger buildings in blocks
+        # Create buildings with varied appearances
+        building_colors = [
+            (120, 120, 120),  # Gray
+            (180, 100, 100),  # Brick Red
+            (100, 130, 150),  # Blue Gray
+            (150, 150, 130),  # Beige
+        ]
+
         for block_x in range(road_width, self.width - road_width, block_size):
             for block_y in range(road_width, self.height - road_width, block_size):
-                # Add 2-3 buildings per block
                 for _ in range(random.randint(2, 3)):
-                    building_width = random.randint(80, 160)  # Increased building sizes
+                    building_width = random.randint(80, 160)
                     building_height = random.randint(80, 160)
                     x = block_x + random.randint(0, block_size - building_width - road_width)
                     y = block_y + random.randint(0, block_size - building_height - road_width)
-                    self.walls.append(pygame.Rect(x, y, building_width, building_height))
+
+                    # Create building with color and window information
+                    self.walls.append({
+                        "rect": pygame.Rect(x, y, building_width, building_height),
+                        "color": random.choice(building_colors),
+                        "windows": {
+                            "rows": random.randint(2, 4),
+                            "cols": random.randint(3, 5)
+                        }
+                    })
 
     def draw(self, screen, camera_x, camera_y):
-        # Draw roads (dark gray)
+        # Draw roads with lane markings
         for road in self.roads:
-            # Adjust position based on camera
-            road_view = pygame.Rect(road.x - camera_x, road.y - camera_y, road.width, road.height)
+            road_view = pygame.Rect(
+                road["rect"].x - camera_x,
+                road["rect"].y - camera_y,
+                road["rect"].width,
+                road["rect"].height
+            )
             if road_view.colliderect(screen.get_rect()):
+                # Draw road base
                 pygame.draw.rect(screen, (50, 50, 50), road_view)
 
-        # Draw buildings (gray)
+                # Draw lane markings
+                line_color = (255, 255, 255)
+                if road["horizontal"]:
+                    line_y = road_view.centery
+                    x = road["rect"].x - camera_x
+                    while x < road["rect"].x + road["rect"].width - camera_x:
+                        pygame.draw.line(screen, line_color,
+                                       (x, line_y),
+                                       (x + 20, line_y), 2)
+                        x += 40
+                else:
+                    line_x = road_view.centerx
+                    y = road["rect"].y - camera_y
+                    while y < road["rect"].y + road["rect"].height - camera_y:
+                        pygame.draw.line(screen, line_color,
+                                       (line_x, y),
+                                       (line_x, y + 20), 2)
+                        y += 40
+
+        # Draw buildings with windows
         for wall in self.walls:
-            # Adjust position based on camera
-            wall_view = pygame.Rect(wall.x - camera_x, wall.y - camera_y, wall.width, wall.height)
+            wall_view = pygame.Rect(
+                wall["rect"].x - camera_x,
+                wall["rect"].y - camera_y,
+                wall["rect"].width,
+                wall["rect"].height
+            )
             if wall_view.colliderect(screen.get_rect()):
-                pygame.draw.rect(screen, (100, 100, 100), wall_view)
+                # Draw building base
+                pygame.draw.rect(screen, wall["color"], wall_view)
+
+                # Draw windows
+                window_width = wall["rect"].width // (wall["windows"]["cols"] * 2)
+                window_height = wall["rect"].height // (wall["windows"]["rows"] * 2)
+                for row in range(wall["windows"]["rows"]):
+                    for col in range(wall["windows"]["cols"]):
+                        window_x = wall_view.x + (col * 2 + 1) * window_width
+                        window_y = wall_view.y + (row * 2 + 1) * window_height
+                        # Random window lighting
+                        window_color = (255, 255, 200) if random.random() < 0.3 else (30, 30, 30)
+                        pygame.draw.rect(screen, window_color,
+                                       (window_x, window_y, window_width * 0.8, window_height * 0.8))
 
         # Draw vehicles
         for vehicle in self.vehicles:
@@ -287,10 +364,10 @@ class Map:
         # Draw roads on minimap
         for road in self.roads:
             mini_road = pygame.Rect(
-                screen.get_width() - minimap_size - margin + road.x * scale,
-                margin + road.y * scale,
-                road.width * scale,
-                road.height * scale
+                screen.get_width() - minimap_size - margin + road["rect"].x * scale,
+                margin + road["rect"].y * scale,
+                road["rect"].width * scale,
+                road["rect"].height * scale
             )
             pygame.draw.rect(screen, (100, 100, 100), mini_road)
 
@@ -311,17 +388,17 @@ class Map:
             road = random.choice(self.roads)
 
             # Determine if road is horizontal or vertical
-            is_horizontal = road.width > road.height
+            is_horizontal = road["rect"].width > road["rect"].height
 
             if is_horizontal:
                 # Place vehicle along horizontal road
-                x = road.x + random.randint(0, road.width - 32)  # Account for vehicle width
-                y = road.y + road.height // 2  # Center in road
+                x = road["rect"].x + random.randint(0, road["rect"].width - 32)  # Account for vehicle width
+                y = road["rect"].y + road["rect"].height // 2  # Center in road
                 rotation = 0 if random.random() > 0.5 else 180  # Face left or right
             else:
                 # Place vehicle along vertical road
-                x = road.x + road.width // 2  # Center in road
-                y = road.y + random.randint(0, road.height - 32)  # Account for vehicle length
+                x = road["rect"].x + road["rect"].width // 2  # Center in road
+                y = road["rect"].y + random.randint(0, road["rect"].height - 32)  # Account for vehicle length
                 rotation = 90 if random.random() > 0.5 else 270  # Face up or down
 
             vehicle = Vehicle(x, y)
