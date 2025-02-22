@@ -9,10 +9,10 @@ class Vehicle:
         self.x = x
         self.y = y
         self.speed = 0
-        self.max_speed = 8
+        self.max_speed = 6  # Slightly reduced for better control
         self.acceleration = 0.2
         self.rotation = 0
-        self.size = (48, 24)  # width, height
+        self.size = (32, 16)  # Reduced from 48x24 to 32x16
         self.rect = pygame.Rect(x - self.size[0]/2, y - self.size[1]/2, self.size[0], self.size[1])
         self.color = (random.randint(50, 255), random.randint(50, 255), random.randint(50, 255))
 
@@ -91,10 +91,10 @@ class Player:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.speed = 5
-        self.size = 32
+        self.speed = 3  # Reduced speed to match smaller size
+        self.size = 16  # Reduced from 32 to 16
         self.rect = pygame.Rect(x - self.size/2, y - self.size/2, self.size, self.size)
-        self.direction = 'down'  # Current facing direction
+        self.direction = 'down'
         self.moving = False
         self.animation_frame = 0
         self.animation_speed = 0.2
@@ -208,20 +208,19 @@ class Player:
 
 class Map:
     def __init__(self):
-        # Make the map much larger than the screen
-        self.width = 2400  # 3x screen width
-        self.height = 1800  # 3x screen height
+        self.width = 2400
+        self.height = 1800
         self.tile_size = 32
         self.walls = []
         self.roads = []
         self.vehicles = []
         self.create_city_layout()
-        self.spawn_vehicles(10)  # Increased number of vehicles for better visibility
+        self.spawn_vehicles(15)  # Increased number of vehicles
 
     def create_city_layout(self):
-        # Create a grid of roads
-        road_width = 64
-        block_size = 200
+        # Create a grid of roads with wider streets
+        road_width = 96  # Increased from 64 to 96
+        block_size = 300  # Increased from 200 to 300
 
         # Create horizontal roads
         for y in range(0, self.height, block_size):
@@ -233,13 +232,13 @@ class Map:
             road = pygame.Rect(x, 0, road_width, self.height)
             self.roads.append(road)
 
-        # Create buildings in blocks
+        # Create larger buildings in blocks
         for block_x in range(road_width, self.width - road_width, block_size):
             for block_y in range(road_width, self.height - road_width, block_size):
                 # Add 2-3 buildings per block
                 for _ in range(random.randint(2, 3)):
-                    building_width = random.randint(50, 120)
-                    building_height = random.randint(50, 120)
+                    building_width = random.randint(80, 160)  # Increased building sizes
+                    building_height = random.randint(80, 160)
                     x = block_x + random.randint(0, block_size - building_width - road_width)
                     y = block_y + random.randint(0, block_size - building_height - road_width)
                     self.walls.append(pygame.Rect(x, y, building_width, building_height))
@@ -305,19 +304,18 @@ class Map:
 
             if is_horizontal:
                 # Place vehicle along horizontal road
-                x = road.x + random.randint(0, road.width - 48)  # Account for vehicle width
+                x = road.x + random.randint(0, road.width - 32)  # Account for vehicle width
                 y = road.y + road.height // 2  # Center in road
                 rotation = 0 if random.random() > 0.5 else 180  # Face left or right
             else:
                 # Place vehicle along vertical road
                 x = road.x + road.width // 2  # Center in road
-                y = road.y + random.randint(0, road.height - 48)  # Account for vehicle length
+                y = road.y + random.randint(0, road.height - 32)  # Account for vehicle length
                 rotation = 90 if random.random() > 0.5 else 270  # Face up or down
 
             vehicle = Vehicle(x, y)
             vehicle.rotation = rotation  # Set initial rotation based on road direction
             self.vehicles.append(vehicle)
-
 
 class Game:
     def __init__(self):
