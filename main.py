@@ -543,14 +543,8 @@ class Game:
         # Handle player movement with WASD keys
         if not self.player.in_vehicle:
             keys = pygame.key.get_pressed()
-            dx = 0
-            dy = 0
-
-            # Simplified movement controls for better responsiveness
-            if keys[pygame.K_a]: dx -= 1
-            if keys[pygame.K_d]: dx += 1
-            if keys[pygame.K_w]: dy -= 1
-            if keys[pygame.K_s]: dy += 1
+            dx = keys[pygame.K_d] - keys[pygame.K_a]  # Right - Left
+            dy = keys[pygame.K_s] - keys[pygame.K_w]  # Down - Up
 
             # Normalize diagonal movement
             if dx != 0 and dy != 0:
@@ -562,20 +556,12 @@ class Game:
         else:
             # Vehicle controls
             keys = pygame.key.get_pressed()
-            forward = 0
-            turn = 0
-
-            # Simplified vehicle controls
-            if keys[pygame.K_w]: forward += 1
-            if keys[pygame.K_s]: forward -= 1
-            if keys[pygame.K_d]: turn += 1
-            if keys[pygame.K_a]: turn -= 1
-
+            forward = keys[pygame.K_w] - keys[pygame.K_s]  # 1 for W, -1 for S, 0 for neither
+            turn = keys[pygame.K_d] - keys[pygame.K_a]  # 1 for D, -1 for A, 0 for neither
             self.player.in_vehicle.move(forward, turn, self.map.walls)
             # Update player position to match vehicle
             self.player.x = self.player.in_vehicle.x
             self.player.y = self.player.in_vehicle.y
-            self.update_camera()
 
     def draw(self):
         # Clear the screen
