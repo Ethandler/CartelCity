@@ -282,108 +282,79 @@ class Map:
         self.spawn_vehicles(20)  
 
     def create_detroit_layout(self):
-        # Main arterial roads based on Detroit's radial layout
         major_roads = [
-            # Woodward Avenue (central diagonal)
-            {"start": (self.width//2, 0), "end": (self.width//2, self.height), "width": 128},
+            {"start": (0, 600), "end": (self.width, 600), "width": 128},  
+            {"start": (0, 1200), "end": (self.width, 1200), "width": 128},  
+            {"start": (0, 1800), "end": (self.width, 1800), "width": 128},  
 
-            # Major radial avenues
-            {"start": (0, self.height//2), "end": (self.width//2, self.height//4), "width": 96},
-            {"start": (self.width//2, self.height//4), "end": (self.width, self.height//2), "width": 96},
-            {"start": (0, 2*self.height//3), "end": (self.width, self.height//2), "width": 96},
-
-            # Grand Boulevard (circular road)
-            *[{"start": (self.width//2 + math.cos(angle)*800, self.height//2 + math.sin(angle)*800),
-               "end": (self.width//2 + math.cos(angle + 0.5)*800, self.height//2 + math.sin(angle + 0.5)*800),
-               "width": 96} for angle in range(0, 12)]
+            {"start": (800, 0), "end": (800, self.height), "width": 128},  
+            {"start": (1600, 0), "end": (1600, self.height), "width": 128},  
+            {"start": (2400, 0), "end": (2400, self.height), "width": 128},  
         ]
 
-        # Create the roads with proper angles
         for road in major_roads:
-            start = road["start"]
-            end = road["end"]
-            width = road["width"]
-
-            # Calculate road angle and length
-            dx = end[0] - start[0]
-            dy = end[1] - start[1]
-            angle = math.atan2(dy, dx)
-            length = math.sqrt(dx*dx + dy*dy)
-
-            # Create a rectangle for the road at the correct angle
-            road_surface = pygame.Surface((length, width), pygame.SRCALPHA)
-            road_rect = pygame.Rect(start[0], start[1], length, width)
-            road_rect.x = start[0]
-            road_rect.y = start[1]
-
-
+            road_rect = pygame.Rect(
+                road["start"][0],
+                road["start"][1],
+                road["end"][0] - road["start"][0] if road["start"][1] == road["end"][1] else road["width"],
+                road["end"][1] - road["start"][1] if road["start"][0] == road["end"][0] else road["width"]
+            )
             self.roads.append({
                 "rect": road_rect,
-                "angle": math.degrees(angle),
-                "major": True,
-                "start": start,
-                "end": end
+                "horizontal": road["start"][1] == road["end"][1],
+                "major": True
             })
 
-        # Create districts based on the provided map
-        districts = [
-            {"name": "Downtown", "center": (self.width//2, self.height//2), "radius": 400},
-            {"name": "Midtown", "center": (self.width//2, self.height//3), "radius": 300},
-            {"name": "New Center", "center": (self.width//2, self.height//4), "radius": 250},
-            # Add more districts with proper positioning
+        block_size = 200  
+
+        for y in range(0, self.height, block_size):
+            if not any(abs(y - road["rect"].y) < 150 for road in self.roads if road.get("major")):
+                road = pygame.Rect(0, y, self.width, 64)  
+                self.roads.append({"rect": road, "horizontal": True, "major": False})
+
+        for x in range(0, self.width, block_size):
+            if not any(abs(x - road["rect"].x) < 150 for road in self.roads if road.get("major")):
+                road = pygame.Rect(x, 0, 64, self.height)  
+                self.roads.append({"rect": road, "horizontal": False, "major": False})
+
+        district_colors = [
+            (120, 120, 120),  
+            (180, 100, 100),  
+            (100, 130, 150),  
+            (150, 150, 130),  
+            (140, 110, 120),  
+            (130, 140, 110),  
+            (110, 120, 140),  
         ]
 
-        # Generate buildings based on district density
-        for district in districts:
-            density = 0.7 if district["name"] == "Downtown" else 0.4
-            buildings_count = int(50 * density)
+        for block_x in range(100, self.width - 100, block_size):
+            for block_y in range(100, self.height - 100, block_size):
+                if any(road["rect"].collidepoint(block_x, block_y) for road in self.roads):
+                    continue
 
-            for _ in range(buildings_count):
-                angle = random.uniform(0, 2*math.pi)
-                distance = random.uniform(0, district["radius"])
-                x = district["center"][0] + math.cos(angle) * distance
-                y = district["center"][1] + math.sin(angle) * distance
+                district_index = (block_x // (self.width // 3) + block_y // (self.height // 3)) % len(district_colors)
 
-                # Don't place buildings on roads
-                if not any(self.point_on_road((x, y), road) for road in self.roads):
-                    building_size = random.randint(40, 100)
+                for _ in range(random.randint(1, 3)):
+                    building_width = random.randint(60, 120)
+                    building_height = random.randint(60, 120)
+                    x = block_x + random.randint(0, block_size - building_width)
+                    y = block_y + random.randint(0, block_size - building_height)
+
                     building_id = f"building_{x}_{y}"
-
                     self.walls.append({
-                        "rect": pygame.Rect(x, y, building_size, building_size),
-                        "color": (120, 120, 120),
-                        "windows": {"rows": 3, "cols": 4},
+                        "rect": pygame.Rect(x, y, building_width, building_height),
+                        "color": district_colors[district_index],
+                        "windows": {
+                            "rows": random.randint(2, 4),
+                            "cols": random.randint(3, 5)
+                        },
                         "id": building_id
                     })
 
                     if building_id not in self.window_states:
                         self.window_states[building_id] = [
-                            random.random() < 0.3 for _ in range(12)
+                            random.random() < 0.3 for _ in range(16)
                         ]
-
-    def point_on_road(self, point, road):
-        # Check if a point is on or near a road
-        x, y = point
-        for road in self.roads:
-            if road["rect"].collidepoint(x, y):
-                return True
-        return False
-
-    def spawn_player(self):
-        # Spawn player on a major road
-        valid_spawn = None
-        while not valid_spawn:
-            road = random.choice([r for r in self.roads if r.get("major")])
-            x = (road["start"][0] + road["end"][0]) // 2
-            y = (road["start"][1] + road["end"][1]) // 2
-
-            # Check if spawn point is clear
-            test_rect = pygame.Rect(x - 16, y - 16, 32, 32)
-            if not any(wall["rect"].colliderect(test_rect) for wall in self.walls):
-                valid_spawn = (x, y)
-
-        return valid_spawn
-
 
     def draw(self, screen, camera_x, camera_y):
         for road in self.roads:
@@ -397,7 +368,7 @@ class Map:
                 pygame.draw.rect(screen, (50, 50, 50), road_view)
 
                 line_color = (255, 255, 255)
-                if road["rect"].width > road["rect"].height:
+                if road["horizontal"]:
                     line_y = road_view.centery
                     x = road["rect"].x - camera_x
                     while x < road["rect"].x + road["rect"].width - camera_x:
@@ -497,8 +468,7 @@ class Game:
         pygame.display.set_caption("GTA Style Game")
 
         self.map = Map()
-        spawn_point = self.map.spawn_player()
-        self.player = Player(spawn_point[0], spawn_point[1])
+        self.player = Player(self.map.width/2, self.map.height/2)
 
         self.camera_x = self.player.x - self.width/2
         self.camera_y = self.player.y - self.height/2
