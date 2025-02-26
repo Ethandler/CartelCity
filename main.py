@@ -458,13 +458,128 @@ class Map:
             vehicle.rotation = rotation  
             self.vehicles.append(vehicle)
 
+class TouchButton:
+    def __init__(self, x, y, width, height, text, color=(100, 100, 100), text_color=(255, 255, 255)):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        self.color = color
+        self.text_color = text_color
+        self.pressed = False
+
+    def draw(self, screen):
+        # Draw button with lighter color when pressed
+        button_color = tuple(min(c + 50, 255) if self.pressed else c for c in self.color)
+        pygame.draw.rect(screen, button_color, self.rect, border_radius=self.rect.height // 4)
+        pygame.draw.rect(screen, (200, 200, 200), self.rect, width=2, border_radius=self.rect.height // 4)
+
+        # Render text if available
+        if self.text:
+            font = pygame.font.Font(None, 28)
+            text_surface = font.render(self.text, True, self.text_color)
+            text_rect = text_surface.get_rect(center=self.rect.center)
+            screen.blit(text_surface, text_rect)
+
+    def check_press(self, pos):
+        if self.rect.collidepoint(pos):
+            self.pressed = True
+            return True
+        return False
+
+    def check_release(self, pos):
+        was_pressed = self.pressed
+        self.pressed = False
+        if was_pressed and self.rect.collidepoint(pos):
+            return True
+        return False
+
+class VirtualJoystick:
+    def __init__(self, x, y, radius):
+        self.base_pos = (x, y)
+        self.radius = radius
+        self.stick_pos = (x, y)
+        self.active = False
+        self.dead_zone = 0.2
+
+    def draw(self, screen):
+        # Draw base
+        pygame.draw.circle(screen, (80, 80, 80), self.base_pos, self.radius)
+        pygame.draw.circle(screen, (200, 200, 200), self.base_pos, self.radius, 2)
+
+        # Draw stick
+        pygame.draw.circle(screen, (150, 150, 150), self.stick_pos, self.radius // 2)
+        pygame.draw.circle(screen, (200, 200, 200), self.stick_pos, self.radius // 2, 2)
+
+    def get_input(self):
+        if not self.active:
+            return (0, 0)
+
+        dx = (self.stick_pos[0] - self.base_pos[0]) / self.radius
+        dy = (self.stick_pos[1] - self.base_pos[1]) / self.radius
+
+        # Apply dead zone
+        distance = math.sqrt(dx*dx + dy*dy)
+        if distance < self.dead_zone:
+            return (0, 0)
+
+        # Normalize if beyond unit circle
+        if distance > 1:
+            dx /= distance
+            dy /= distance
+
+        return (dx, dy)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Check if press is within joystick area
+            distance = math.sqrt((event.pos[0] - self.base_pos[0])**2 + (event.pos[1] - self.base_pos[1])**2)
+            if distance <= self.radius * 1.5:  # Slightly larger detection area
+                self.active = True
+
+        elif event.type == pygame.MOUSEMOTION and self.active:
+            # Calculate distance from center
+            dx = event.pos[0] - self.base_pos[0]
+            dy = event.pos[1] - self.base_pos[1]
+            distance = math.sqrt(dx*dx + dy*dy)
+
+            # Limit stick position to the joystick radius
+            if distance > self.radius:
+                dx = dx * self.radius / distance
+                dy = dy * self.radius / distance
+
+            self.stick_pos = (self.base_pos[0] + dx, self.base_pos[1] + dy)
+
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.active:
+                self.active = False
+                self.stick_pos = self.base_pos
+
 class Game:
     def __init__(self):
         os.environ['SDL_VIDEODRIVER'] = 'x11'
 
-        self.width = 800
-        self.height = 600
-        self.screen = pygame.display.set_mode((self.width, self.height))
+        pygame.init()
+        # Try to detect if we're on mobile
+        self.is_mobile = False
+        try:
+            # Get information about display
+            display_info = pygame.display.Info()
+            # Check screen dimensions and aspect ratio
+            if display_info.current_w <= 1280 or display_info.current_h <= 720:
+                self.is_mobile = True
+        except:
+            # If there's an error, default to non-mobile
+            pass
+
+        # Set display mode
+        if self.is_mobile:
+            self.width = 800 
+            self.height = 600
+            self.screen = pygame.display.set_mode((self.width, self.height))
+        else:
+            self.width = 800
+            self.height = 600
+            self.screen = pygame.display.set_mode((self.width, self.height))
+
         pygame.display.set_caption("GTA Style Game")
 
         self.map = Map()
@@ -476,6 +591,26 @@ class Game:
         self.running = True
         self.dragging = False
         self.last_mouse_pos = None
+
+        # Create virtual controls for mobile
+        button_size = 60
+        margin = 20
+        joystick_radius = 70
+
+        # Create virtual joystick for movement
+        self.joystick = VirtualJoystick(margin + joystick_radius, 
+                                        self.height - margin - joystick_radius, 
+                                        joystick_radius)
+
+        # Create action button (E key equivalent)
+        self.action_button = TouchButton(
+            self.width - margin - button_size, 
+            self.height - margin - button_size,
+            button_size, button_size, "E"
+        )
+
+        # Create mobile controls flag
+        self.show_mobile_controls = True
 
     def update_camera(self):
         margin = 200
@@ -500,8 +635,23 @@ class Game:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_e:
                     self.player.enter_exit_vehicle(self.map.vehicles)
+                elif event.key == pygame.K_m:  # Toggle mobile controls with M key
+                    self.show_mobile_controls = not self.show_mobile_controls
+
+            # Handle touch/mobile controls if enabled
+            if self.show_mobile_controls:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if self.action_button.check_press(event.pos):
+                        self.player.enter_exit_vehicle(self.map.vehicles)
+
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    self.action_button.check_release(event.pos)
+
+                # Handle joystick events
+                self.joystick.handle_event(event)
 
         if not self.player.in_vehicle:
+            # Keyboard controls
             keys = pygame.key.get_pressed()
             dx = 0
             dy = 0
@@ -511,6 +661,12 @@ class Game:
             if keys[pygame.K_w]: dy -= 1
             if keys[pygame.K_s]: dy += 1
 
+            # Add joystick input if active
+            if self.show_mobile_controls:
+                joy_x, joy_y = self.joystick.get_input()
+                dx += joy_x
+                dy += joy_y
+
             if dx != 0 and dy != 0:
                 dx *= 0.7071  
                 dy *= 0.7071
@@ -518,6 +674,7 @@ class Game:
             self.player.move(dx, dy, self.map.walls)
             self.update_camera()
         else:
+            # Vehicle keyboard controls
             keys = pygame.key.get_pressed()
             forward = 0
             turn = 0
@@ -526,6 +683,12 @@ class Game:
             if keys[pygame.K_s]: forward -= 1
             if keys[pygame.K_d]: turn += 1
             if keys[pygame.K_a]: turn -= 1
+
+            # Add joystick input for vehicle if active
+            if self.show_mobile_controls:
+                joy_x, joy_y = self.joystick.get_input()
+                forward -= joy_y  # Invert Y for forward/backward
+                turn += joy_x
 
             self.player.in_vehicle.move(forward, turn, self.map.walls)
             self.player.x = self.player.in_vehicle.x
@@ -541,6 +704,26 @@ class Game:
             self.player.draw(self.screen, self.camera_x, self.camera_y)
 
         self.map.draw_minimap(self.screen, self.player.x, self.player.y)
+
+        # Draw mobile controls if enabled
+        if self.show_mobile_controls:
+            # Draw semi-transparent overlay for control area
+            controls_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            controls_overlay.fill((0, 0, 0, 30))  # Very subtle darkening
+
+            # Draw virtual joystick
+            self.joystick.draw(controls_overlay)
+
+            # Draw action button
+            self.action_button.draw(controls_overlay)
+
+            # Draw control instructions
+            font = pygame.font.Font(None, 20)
+            hint_text = font.render("Move: Joystick | Action: E Button | Toggle Controls: M", True, (255, 255, 255))
+            controls_overlay.blit(hint_text, (self.width // 2 - hint_text.get_width() // 2, 10))
+
+            # Blit the controls overlay
+            self.screen.blit(controls_overlay, (0, 0))
 
         pygame.display.flip()
 
