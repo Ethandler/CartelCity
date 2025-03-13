@@ -4,6 +4,296 @@ import sys
 import random
 import os
 
+class Map:
+    def __init__(self):
+        try:
+            # Load and scale the map image
+            self.map_image = pygame.image.load('attached_assets/IMG_7818.jpeg').convert()
+            # Scale image to a reasonable size
+            self.width = 2400  # Fixed size for consistent gameplay
+            self.height = 1800
+            self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
+        except pygame.error as e:
+            print(f"Error loading map image: {e}")
+            # Create fallback surface if image fails to load
+            self.map_image = pygame.Surface((self.width, self.height))
+            self.map_image.fill((100, 100, 100))  # Gray background
+
+        self.tile_size = 32
+        self.walls = []
+        self.roads = []
+        self.vehicles = []
+        self.police_vehicles = []
+        self.pedestrians = []
+
+        # Create game objects
+        self.create_city_layout()
+        self.spawn_vehicles(15)
+        self.spawn_police(3)
+        self.spawn_pedestrians(30)
+
+        # Time of day system
+        self.time_of_day = 0.3
+        self.time_speed = 0.0001
+        self.sky_colors = {
+            0.0: (10, 10, 40),     # Midnight
+            0.25: (200, 120, 40),  # Sunrise
+            0.5: (100, 150, 255),  # Noon
+            0.75: (255, 100, 50),  # Sunset
+            1.0: (10, 10, 40)      # Midnight again
+        }
+
+    def create_city_layout(self):
+        try:
+            # Create roads based on image analysis
+            surface_array = pygame.surfarray.array3d(self.map_image)
+            road_threshold = 100  # Adjust based on your image
+
+            # Sample points in the image to detect roads
+            step = 32  # Sample every 32 pixels
+            for x in range(0, self.width, step):
+                for y in range(0, self.height, step):
+                    # Get average brightness of area
+                    area = surface_array[x:min(x+step, self.width), 
+                                      y:min(y+step, self.height)]
+                    brightness = area.mean()
+
+                    if brightness < road_threshold:
+                        # Dark area - likely a road
+                        is_horizontal = True if area.shape[1] > area.shape[0] else False
+                        road = pygame.Rect(x, y, step, step)
+                        self.roads.append({"rect": road, "horizontal": is_horizontal})
+
+                        # Add walls along road edges
+                        wall_width = 8
+                        if is_horizontal:
+                            # Add walls above and below road
+                            self.walls.append({"rect": pygame.Rect(x, y - wall_width, step, wall_width)})
+                            self.walls.append({"rect": pygame.Rect(x, y + step, step, wall_width)})
+                        else:
+                            # Add walls to left and right of road
+                            self.walls.append({"rect": pygame.Rect(x - wall_width, y, wall_width, step)})
+                            self.walls.append({"rect": pygame.Rect(x + step, y, wall_width, step)})
+        except Exception as e:
+            print(f"Error creating city layout: {e}")
+            # Create fallback layout
+            self.create_fallback_layout()
+
+    def create_fallback_layout(self):
+        # Create a basic grid layout if image analysis fails
+        road_width = 96
+        block_size = 300
+
+        # Create horizontal and vertical roads
+        for y in range(0, self.height, block_size):
+            self.roads.append({"rect": pygame.Rect(0, y, self.width, road_width), "horizontal": True})
+
+        for x in range(0, self.width, block_size):
+            self.roads.append({"rect": pygame.Rect(x, 0, road_width, self.height), "horizontal": False})
+
+    def draw(self, screen, camera_x, camera_y):
+        # Draw the map image
+        view_rect = pygame.Rect(camera_x, camera_y, screen.get_width(), screen.get_height())
+        screen.blit(self.map_image, (0, 0), view_rect)
+
+        # Apply time of day lighting effect
+        light_level = self.get_light_level()
+        if light_level < 1.0:
+            # Create a semi-transparent dark overlay for night time
+            darkness = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+            alpha = int(255 * (1.0 - light_level))
+            darkness.fill((0, 0, 0, alpha))
+            screen.blit(darkness, (0, 0))
+
+        # Draw other game objects (vehicles, pedestrians, etc.)
+        # Draw pedestrians in proper order
+        for pedestrian in self.pedestrians:
+            pedestrian.draw(screen, camera_x, camera_y)
+
+        # Draw regular vehicles
+        for vehicle in self.vehicles:
+            vehicle.draw(screen, camera_x, camera_y)
+
+        # Draw police vehicles
+        for vehicle in self.police_vehicles:
+            vehicle.draw(screen, camera_x, camera_y)
+
+    def spawn_vehicles(self, count):
+        for _ in range(count):
+            # Find a random road
+            if not self.roads:  # Safety check
+                return
+
+            road = random.choice(self.roads)
+
+            # Determine if road is horizontal or vertical
+            is_horizontal = road["rect"].width > road["rect"].height
+
+            if is_horizontal:
+                # Place vehicle along horizontal road
+                x = road["rect"].x + random.randint(0, road["rect"].width - 32)  # Account for vehicle width
+                y = road["rect"].y + road["rect"].height // 2  # Center in road
+                rotation = 0 if random.random() > 0.5 else 180  # Face left or right
+            else:
+                # Place vehicle along vertical road
+                x = road["rect"].x + road["rect"].width // 2  # Center in road
+                y = road["rect"].y + random.randint(0, road["rect"].height - 32)  # Account for vehicle length
+                rotation = 90 if random.random() > 0.5 else 270  # Face up or down
+
+            vehicle = Vehicle(x, y)
+            vehicle.rotation = rotation  # Set initial rotation based on road direction
+            self.vehicles.append(vehicle)
+
+    def spawn_police(self, count):
+        for _ in range(count):
+            # Find a random road
+            if not self.roads:  # Safety check
+                return
+
+            road = random.choice(self.roads)
+
+            # Determine if road is horizontal or vertical
+            is_horizontal = road["rect"].width > road["rect"].height
+
+            if is_horizontal:
+                # Place police along horizontal road
+                x = road["rect"].x + random.randint(0, road["rect"].width - 32)
+                y = road["rect"].y + road["rect"].height // 2
+                rotation = 0 if random.random() > 0.5 else 180
+            else:
+                # Place police along vertical road
+                x = road["rect"].x + road["rect"].width // 2
+                y = road["rect"].y + random.randint(0, road["rect"].height - 32)
+                rotation = 90 if random.random() > 0.5 else 270
+
+            police = PoliceVehicle(x, y)
+            police.rotation = rotation
+            self.police_vehicles.append(police)
+
+    def spawn_pedestrians(self, count):
+        for _ in range(count):
+            # Find a random position near a road (sidewalk)
+            if not self.roads:
+                return
+
+            road = random.choice(self.roads)
+            road_rect = road["rect"]
+
+            # Determine sidewalk position
+            sidewalk_width = 10
+            if road["horizontal"]:
+                # Horizontal road - spawn on top or bottom sidewalk
+                x = road_rect.x + random.randint(0, road_rect.width)
+                if random.random() < 0.5:
+                    # Top sidewalk
+                    y = road_rect.y + sidewalk_width // 2
+                else:
+                    # Bottom sidewalk
+                    y = road_rect.y + road_rect.height - sidewalk_width // 2
+            else:
+                # Vertical road - spawn on left or right sidewalk
+                y = road_rect.y + random.randint(0, road_rect.height)
+                if random.random() < 0.5:
+                    # Left sidewalk
+                    x = road_rect.x + sidewalk_width // 2
+                else:
+                    # Right sidewalk
+                    x = road_rect.x + road_rect.width - sidewalk_width // 2
+
+            pedestrian = Pedestrian(x, y)
+            self.pedestrians.append(pedestrian)
+
+    def update(self, player):
+        # Update time of day
+        self.time_of_day = (self.time_of_day + self.time_speed) % 1.0
+
+        # Update police AI
+        for police in self.police_vehicles:
+            police.update_ai(player, self.walls, self.roads)
+
+        # Update pedestrians and remove dead ones that have timed out
+        for pedestrian in self.pedestrians[:]:
+            should_remove = pedestrian.update_ai(
+                player, self.walls, self.roads, 
+                self.vehicles + self.police_vehicles + ([player.in_vehicle] if player.in_vehicle else []), 
+                player.bullets, self.pedestrians
+            )
+            if should_remove:
+                self.pedestrians.remove(pedestrian)
+
+        # Respawn pedestrians if needed
+        if len(self.pedestrians) < 30:
+            self.spawn_pedestrians(1)
+
+    def get_light_level(self):
+        # Returns light level between 0.0 (dark) and 1.0 (bright)
+        if self.time_of_day < 0.25:  # Midnight to sunrise
+            return 0.2 + (self.time_of_day / 0.25) * 0.8
+        elif self.time_of_day < 0.75:  # Sunrise to sunset
+            return 1.0
+        else:  # Sunset to midnight
+            return 0.2 + (1.0 - (self.time_of_day - 0.75) / 0.25) * 0.8
+
+    def get_sky_color(self):
+        # Find the two closest time points
+        times = sorted(self.sky_colors.keys())
+        for i in range(len(times)):
+            if self.time_of_day <= times[i]:
+                if i == 0:
+                    t1, t2 = times[-1], times[0]
+                    factor = self.time_of_day / times[0]
+                else:
+                    t1, t2 = times[i-1], times[i]
+                    factor = (self.time_of_day - t1) / (t2 - t1)
+                break
+        else:
+            t1, t2 = times[-1], times[0]
+            factor = (self.time_of_day - t1) / (1.0 - t1)
+
+        # Interpolate between colors
+        c1 = self.sky_colors[t1]
+        c2 = self.sky_colors[t2]
+        return tuple(int(c1[i] + (c2[i] - c1[i]) * factor) for i in range(3))
+
+    def draw_minimap(self, screen, player_x, player_y):
+        # Draw minimap in top-right corner
+        minimap_size = 150
+        margin = 10
+        scale = minimap_size / max(self.width, self.height)
+
+        # Draw minimap background
+        minimap_rect = pygame.Rect(screen.get_width() - minimap_size - margin, 
+                                 margin, minimap_size, minimap_size)
+        pygame.draw.rect(screen, (0, 0, 0), minimap_rect)
+
+        # Draw roads on minimap
+        for road in self.roads:
+            mini_road = pygame.Rect(
+                screen.get_width() - minimap_size - margin + road["rect"].x * scale,
+                margin + road["rect"].y * scale,
+                road["rect"].width * scale,
+                road["rect"].height * scale
+            )
+            pygame.draw.rect(screen, (100, 100, 100), mini_road)
+
+        # Draw player on minimap
+        player_pos = (
+            screen.get_width() - minimap_size - margin + player_x * scale,
+            margin + player_y * scale
+        )
+        pygame.draw.circle(screen, (255, 0, 0), 
+                         (int(player_pos[0]), int(player_pos[1])), 3)
+
+        # Draw police vehicles as blue dots
+        for police in self.police_vehicles:
+            police_pos = (
+                screen.get_width() - minimap_size - margin + police.x * scale,
+                margin + police.y * scale
+            )
+            pygame.draw.circle(screen, (0, 0, 255), 
+                            (int(police_pos[0]), int(police_pos[1])), 2)
+
+
 class Vehicle:
     def __init__(self, x, y):
         self.x = x
@@ -306,7 +596,7 @@ class Player:
         # Check collision with walls
         can_move = True
         for wall in walls:
-            if new_rect.colliderect(wall["rect"]): #Corrected this line
+            if new_rect.colliderect(wall["rect"]):
                 can_move = False
                 break
 
@@ -669,7 +959,7 @@ class Pedestrian:
             self.flee_target = player
             self.ai_timer = random.randint(40, 80)
 
-        # Also flee from vehicles moving fast
+        # Alsoflee from vehicles moving fast
         for vehicle in vehicles:
             if vehicle.speed > 3 and self.distance_to_pos(vehicle.x, vehicle.y) < 80:
                 self.ai_state = "flee"
@@ -948,23 +1238,35 @@ class Pedestrian:
 
     class Map:
         def __init__(self):
-            self.width = 2400
-            self.height = 1800
+            try:
+                # Load and scale the map image
+                self.map_image = pygame.image.load('attached_assets/IMG_7818.jpeg').convert()
+                # Scale image to a reasonable size
+                self.width = 2400  # Fixed size for consistent gameplay
+                self.height = 1800
+                self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
+            except pygame.error as e:
+                print(f"Error loading map image: {e}")
+                # Create fallback surface if image fails to load
+                self.map_image = pygame.Surface((self.width, self.height))
+                self.map_image.fill((100, 100, 100))  # Gray background
+
             self.tile_size = 32
             self.walls = []
             self.roads = []
             self.vehicles = []
             self.police_vehicles = []
             self.pedestrians = []
-            self.window_states = {}  # Store window lighting states
+
+            # Create game objects
             self.create_city_layout()
             self.spawn_vehicles(15)
             self.spawn_police(3)
             self.spawn_pedestrians(30)
 
-            # Time of day system - 0.0 to 1.0 (0.0 = midnight, 0.5 = noon)
-            self.time_of_day = 0.3  # Start in morning
-            self.time_speed = 0.0001  # Speed of time passing
+            # Time of day system
+            self.time_of_day = 0.3
+            self.time_speed = 0.0001
             self.sky_colors = {
                 0.0: (10, 10, 40),     # Midnight
                 0.25: (200, 120, 40),  # Sunrise
@@ -974,156 +1276,68 @@ class Pedestrian:
             }
 
         def create_city_layout(self):
+            try:
+                # Create roads based on image analysis
+                surface_array = pygame.surfarray.array3d(self.map_image)
+                road_threshold = 100  # Adjust based on your image
+
+                # Sample points in the image to detect roads
+                step = 32  # Sample every 32 pixels
+                for x in range(0, self.width, step):
+                    for y in range(0, self.height, step):
+                        # Get average brightness of area
+                        area = surface_array[x:min(x+step, self.width), 
+                                          y:min(y+step, self.height)]
+                        brightness = area.mean()
+
+                        if brightness < road_threshold:
+                            # Dark area - likely a road
+                            is_horizontal = True if area.shape[1] > area.shape[0] else False
+                            road = pygame.Rect(x, y, step, step)
+                            self.roads.append({"rect": road, "horizontal": is_horizontal})
+
+                            # Add walls along road edges
+                            wall_width = 8
+                            if is_horizontal:
+                                # Add walls above and below road
+                                self.walls.append({"rect": pygame.Rect(x, y - wall_width, step, wall_width)})
+                                self.walls.append({"rect": pygame.Rect(x, y + step, step, wall_width)})
+                            else:
+                                # Add walls to left and right of road
+                                self.walls.append({"rect": pygame.Rect(x - wall_width, y, wall_width, step)})
+                                self.walls.append({"rect": pygame.Rect(x + step, y, wall_width, step)})
+            except Exception as e:
+                print(f"Error creating city layout: {e}")
+                # Create fallback layout
+                self.create_fallback_layout()
+
+        def create_fallback_layout(self):
+            # Create a basic grid layout if image analysis fails
             road_width = 96
             block_size = 300
 
-            # Create roads with lane markings
+            # Create horizontal and vertical roads
             for y in range(0, self.height, block_size):
-                road = pygame.Rect(0, y, self.width, road_width)
-                self.roads.append({"rect": road, "horizontal": True})
+                self.roads.append({"rect": pygame.Rect(0, y, self.width, road_width), "horizontal": True})
 
             for x in range(0, self.width, block_size):
-                road = pygame.Rect(x, 0, road_width, self.height)
-                self.roads.append({"rect": road, "horizontal": False})
-
-            # Create buildings with varied appearances
-            building_colors = [
-                (120, 120, 120),  # Gray
-                (180, 100, 100),  # Brick Red
-                (100, 130, 150),  # Blue Gray
-                (150, 150, 130),  # Beige
-            ]
-
-            for block_x in range(road_width, self.width - road_width, block_size):
-                for block_y in range(road_width, self.height - road_width, block_size):
-                    for _ in range(random.randint(2, 3)):
-                        building_width = random.randint(80, 160)
-                        building_height = random.randint(80, 160)
-                        x = block_x + random.randint(0, block_size - building_width - road_width)
-                        y = block_y + random.randint(0, block_size - building_height - road_width)
-
-                        # Create building with color and window information
-                        building_id = f"building_{x}_{y}"
-                        self.walls.append({
-                            "rect": pygame.Rect(x, y, building_width, building_height),
-                            "color": random.choice(building_colors),
-                            "windows": {
-                                "rows": random.randint(2, 4),
-                                "cols": random.randint(3, 5)
-                            },
-                            "id": building_id
-                        })
-
-                        # Initialize window states for this building
-                        if building_id not in self.window_states:
-                            self.window_states[building_id] = []
-                            for _ in range(16):  # Maximum possible windows
-                                self.window_states[building_id].append(random.random() < 0.3)
+                self.roads.append({"rect": pygame.Rect(x, 0, road_width, self.height), "horizontal": False})
 
         def draw(self, screen, camera_x, camera_y):
-            # Calculate sky color based on time of day
-            sky_color = self.get_sky_color()
+            # Draw the map image
+            view_rect = pygame.Rect(camera_x, camera_y, screen.get_width(), screen.get_height())
+            screen.blit(self.map_image, (0, 0), view_rect)
 
-            # Fill the background with sky color
-            screen.fill(sky_color)
+            # Apply time of day lighting effect
+            light_level = self.get_light_level()
+            if light_level < 1.0:
+                # Create a semi-transparent dark overlay for night time
+                darkness = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+                alpha = int(255 * (1.0 - light_level))
+                darkness.fill((0, 0, 0, alpha))
+                screen.blit(darkness, (0, 0))
 
-            # Draw grass
-            grass_color = (
-                max(20, int(34 * self.get_light_level())),
-                max(40, int(139 * self.get_light_level())),
-                max(20, int(34 * self.get_light_level()))
-            )
-            pygame.draw.rect(screen, grass_color, (0, 0, screen.get_width(), screen.get_height()))
-
-            # Draw roads with lane markings
-            for road in self.roads:
-                road_view = pygame.Rect(
-                    road["rect"].x - camera_x,
-                    road["rect"].y - camera_y,
-                    road["rect"].width,
-                    road["rect"].height
-                )
-                if road_view.colliderect(screen.get_rect()):
-                    # Draw road base
-                    pygame.draw.rect(screen, (50, 50, 50), road_view)
-
-                    # Draw lane markings
-                    line_color = (255, 255, 255)
-                    if road["horizontal"]:
-                        line_y = road_view.centery
-                        x = road["rect"].x - camera_x
-                        while x < road["rect"].x + road["rect"].width - camera_x:
-                            pygame.draw.line(screen, line_color,
-                                           (x, line_y),
-                                           (x + 20, line_y), 2)
-                            x += 40
-                    else:
-                        line_x = road_view.centerx
-                        y = road["rect"].y - camera_y
-                        while y < road["rect"].y + road["rect"].height - camera_y:
-                            pygame.draw.line(screen, line_color,
-                                           (line_x, y),
-                                           (line_x, y + 20), 2)
-                            y += 40
-
-                    # Draw sidewalks
-                    sidewalk_color = (180, 180, 180)
-                    sidewalk_width = 10
-
-                    # Outer sidewalk borders
-                    if road["horizontal"]:
-                        # Top sidewalk
-                        pygame.draw.rect(screen, sidewalk_color, 
-                                        (road_view.x, road_view.y, road_view.width, sidewalk_width))
-                        # Bottom sidewalk
-                        pygame.draw.rect(screen, sidewalk_color, 
-                                        (road_view.x, road_view.y + road_view.height - sidewalk_width, 
-                                         road_view.width, sidewalk_width))
-                    else:
-                        # Left sidewalk
-                        pygame.draw.rect(screen, sidewalk_color, 
-                                        (road_view.x, road_view.y, sidewalk_width, road_view.height))
-                        # Right sidewalk
-                        pygame.draw.rect(screen, sidewalk_color, 
-                                        (road_view.x + road_view.width - sidewalk_width, road_view.y, 
-                                         sidewalk_width, road_view.height))
-
-            # Draw buildings with windows
-            for wall in self.walls:
-                wall_view = pygame.Rect(
-                    wall["rect"].x - camera_x,
-                    wall["rect"].y - camera_y,
-                    wall["rect"].width,
-                    wall["rect"].height
-                )
-                if wall_view.colliderect(screen.get_rect()):
-                    # Draw building base
-                    pygame.draw.rect(screen, wall["color"], wall_view)
-
-                    # Draw windows using persistent states
-                    window_width = wall["rect"].width // (wall["windows"]["cols"] * 2)
-                    window_height = wall["rect"].height // (wall["windows"]["rows"] * 2)
-                    window_index = 0
-                    for row in range(wall["windows"]["rows"]):
-                        for col in range(wall["windows"]["cols"]):
-                            if window_index < len(self.window_states[wall["id"]]):
-                                window_x = wall_view.x + (col * 2 + 1) * window_width
-                                window_y = wall_view.y + (row * 2 + 1) * window_height
-                                # Use persistent window state, but make windows brighter at night
-                                light_level = self.get_light_level()
-                                if self.window_states[wall["id"]][window_index]:
-                                    # Window is lit - brighter at night
-                                    brightness = min(255, int(255 * (1.0 - light_level * 0.7)))
-                                    window_color = (brightness, brightness, brightness * 0.8)
-                                else:
-                                    # Window is dark - darker at night
-                                    darkness = int(30 * light_level)
-                                    window_color = (darkness, darkness, darkness)
-
-                                pygame.draw.rect(screen, window_color,
-                                               (window_x, window_y, window_width * 0.8, window_height * 0.8))
-                                window_index += 1
-
+            # Draw other game objects (vehicles, pedestrians, etc.)
             # Draw pedestrians in proper order
             for pedestrian in self.pedestrians:
                 pedestrian.draw(screen, camera_x, camera_y)
@@ -1135,44 +1349,6 @@ class Pedestrian:
             # Draw police vehicles
             for vehicle in self.police_vehicles:
                 vehicle.draw(screen, camera_x, camera_y)
-
-        def draw_minimap(self, screen, player_x, player_y):
-            # Draw minimap in top-right corner
-            minimap_size = 150
-            margin = 10
-            scale = minimap_size / max(self.width, self.height)
-
-            # Draw minimap background
-            minimap_rect = pygame.Rect(screen.get_width() - minimap_size - margin, 
-                                     margin, minimap_size, minimap_size)
-            pygame.draw.rect(screen, (0, 0, 0), minimap_rect)
-
-            # Draw roads on minimap
-            for road in self.roads:
-                mini_road = pygame.Rect(
-                    screen.get_width() - minimap_size - margin + road["rect"].x * scale,
-                    margin + road["rect"].y * scale,
-                    road["rect"].width * scale,
-                    road["rect"].height * scale
-                )
-                pygame.draw.rect(screen, (100, 100, 100), mini_road)
-
-            # Draw player on minimap
-            player_pos = (
-                screen.get_width() - minimap_size - margin + player_x * scale,
-                margin + player_y * scale
-            )
-            pygame.draw.circle(screen, (255, 0, 0), 
-                             (int(player_pos[0]), int(player_pos[1])), 3)
-
-            # Draw police vehicles as blue dots
-            for police in self.police_vehicles:
-                police_pos = (
-                    screen.get_width() - minimap_size - margin + police.x * scale,
-                    margin + police.y * scale
-                )
-                pygame.draw.circle(screen, (0, 0, 255), 
-                                (int(police_pos[0]), int(police_pos[1])), 2)
 
         def spawn_vehicles(self, count):
             for _ in range(count):
@@ -1263,16 +1439,6 @@ class Pedestrian:
             # Update time of day
             self.time_of_day = (self.time_of_day + self.time_speed) % 1.0
 
-            # Update window states occasionally
-            if random.random() < 0.001:
-                for building_id in self.window_states:
-                    for i in range(len(self.window_states[building_id])):
-                        # Windows are more likely to be on at night
-                        light_level = self.get_light_level()
-                        if random.random() < 0.05:  # 5% chance to change state
-                            night_factor = 1.0 - light_level  # More windows on at night
-                            self.window_states[building_id][i] = random.random() < (0.3 + night_factor * 0.4)
-
             # Update police AI
             for police in self.police_vehicles:
                 police.update_ai(player, self.walls, self.roads)
@@ -1321,29 +1487,129 @@ class Pedestrian:
             c2 = self.sky_colors[t2]
             return tuple(int(c1[i] + (c2[i] - c1[i]) * factor) for i in range(3))
 
+        def draw_minimap(self, screen, player_x, player_y):
+            # Draw minimap in top-right corner
+            minimap_size = 150
+            margin = 10
+            scale = minimap_size / max(self.width, self.height)
+
+            # Draw minimap background
+            minimap_rect = pygame.Rect(screen.get_width() - minimap_size - margin, 
+                                     margin, minimap_size, minimap_size)
+            pygame.draw.rect(screen, (0, 0, 0), minimap_rect)
+
+            # Draw roads on minimap
+            for road in self.roads:
+                mini_road = pygame.Rect(
+                    screen.get_width() - minimap_size - margin + road["rect"].x * scale,
+                    margin + road["rect"].y * scale,
+                    road["rect"].width * scale,
+                    road["rect"].height * scale
+                )
+                pygame.draw.rect(screen, (100, 100, 100), mini_road)
+
+            # Draw player on minimap
+            player_pos = (
+                screen.get_width() - minimap_size - margin + player_x * scale,
+                margin + player_y * scale
+            )
+            pygame.draw.circle(screen, (255, 0, 0), 
+                             (int(player_pos[0]), int(player_pos[1])), 3)
+
+            # Draw police vehicles as blue dots
+            for police in self.police_vehicles:
+                police_pos = (
+                    screen.get_width() - minimap_size - margin + police.x * scale,
+                    margin + police.y * scale
+                )
+                pygame.draw.circle(screen, (0, 0, 255), 
+                                (int(police_pos[0]), int(police_pos[1])), 2)
+
+
 class Game:
     def __init__(self):
         # Set SDL variables for Replit environment
         os.environ['SDL_VIDEODRIVER'] = 'x11'
         os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'  # Force software rendering
 
+        pygame.init()
         self.width = 800
         self.height = 600
         self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("GTA Style Game")
+        pygame.display.set_caption("Cartel City")
 
         # Create game objects
         self.map = Map()
-        # Start player in center of map
-        self.player = Player(self.map.width/2, self.map.height/2)
 
-        # Initialize camera to center on player
+        # Start player in a valid position on the map
+        valid_spawn = False
+        while not valid_spawn:
+            spawn_x = random.randint(100, self.map.width - 100)
+            spawn_y = random.randint(100, self.map.height - 100)
+            # Check if spawn point is on a road
+            for road in self.map.roads:
+                if road["rect"].collidepoint(spawn_x, spawn_y):
+                    valid_spawn = True
+                    break
+
+        self.player = Player(spawn_x, spawn_y)
+
+        # Initialize camera
         self.camera_x = self.player.x - self.width/2
         self.camera_y = self.player.y - self.height/2
 
         # Game state
         self.running = True
         self.clock = pygame.time.Clock()
+
+        # Debug info
+        self.show_debug = False
+        self.font = pygame.font.SysFont(None, 24)
+
+    def draw_debug_info(self):
+        if not self.show_debug:
+            return
+
+        debug_info = [
+            f"FPS: {int(self.clock.get_fps())}",
+            f"Player Pos: ({int(self.player.x)}, {int(self.player.y)})",
+            f"In Vehicle: {self.player.in_vehicle is not None}",
+            f"Wanted Level: {self.player.wanted_level:.1f}",
+            f"Pedestrians: {len(self.map.pedestrians)}",
+            f"Police: {len(self.map.police_vehicles)}"
+        ]
+
+        y = 10
+        for info in debug_info:
+            text = self.font.render(info, True, (255, 255, 255))
+            self.screen.blit(text, (10, y))
+            y += 20
+
+    def draw_controls_help(self):
+        controls = [
+            "WASD: Move",
+            "E: Enter/Exit Vehicle",
+            "SPACE: Shoot",
+            "F3: Toggle Debug Info"
+        ]
+
+        y = self.height - len(controls) * 20 - 10
+        for control in controls:
+            text = self.font.render(control, True, (255, 255, 255))
+            self.screen.blit(text, (10, y))
+            y += 20
+
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_e:
+                    self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
+                elif event.key == pygame.K_SPACE:
+                    self.player.shoot()
+                elif event.key == pygame.K_F3:
+                    self.show_debug = not self.show_debug
 
     def update_camera(self):
         # Calculate target camera position (centered on player)
@@ -1357,16 +1623,6 @@ class Game:
         # Keep camera within map bounds
         self.camera_x = max(0, min(self.camera_x, self.map.width - self.width))
         self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
-
-    def handle_events(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_e:
-                    self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
-                elif event.key == pygame.K_SPACE:
-                    self.player.shoot()
 
     def run(self):
         while self.running:
@@ -1404,6 +1660,7 @@ class Game:
             self.update_camera()
 
             # Draw everything
+            self.screen.fill(self.map.get_sky_color())  # Clear screen with sky color
             self.map.draw(self.screen, self.camera_x, self.camera_y)
 
             # Draw vehicles
@@ -1422,6 +1679,8 @@ class Game:
             # Draw UI elements
             self.player.draw_wanted_level(self.screen)
             self.map.draw_minimap(self.screen, self.player.x, self.player.y)
+            self.draw_controls_help()
+            self.draw_debug_info()
 
             # Update display
             pygame.display.flip()
@@ -1432,7 +1691,6 @@ def main():
     os.environ['SDL_VIDEODRIVER'] = 'x11'
     os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
 
-    pygame.init()
     game = Game()
     game.run()
 

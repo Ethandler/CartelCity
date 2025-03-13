@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>Cartel City Hustle</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4000px;
+            height: 4000px;
+            background-image: url('https://placehold.co/4000x4000/444/fff?text=Cartel+City+Map'); /* Placeholder map */
+            background-size: cover;
+        }
+
+        #player {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 40px;
+            background-image: url('https://placehold.co/40x40/blue/white?text=P'); /* Placeholder player sprite */
+            background-size: cover;
+            transform: translate(-50%, -50%);
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 1000;
+        }
+
+        .control-button {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #mission-info {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+
+        .mission-marker {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: rgba(255, 0, 0, 0.7);
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        .vehicle {
+            position: absolute;
+            width: 60px;
+            height: 30px;
+            background-color: rgba(0, 255, 0, 0.7);
+            border-radius: 5px;
+            border: 2px solid white;
+        }
+
+        .police {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(0, 0, 255, 0.7);
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        .building {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background-color: rgba(128, 128, 128, 0.7);
+            border: 2px solid white;
+        }
+
+        #weapon-info {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+
+        #weapon-switch {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .weapon-button {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(255, 255, 255, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            color: white;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="map"></div>
+        <div id="player"></div>
+        <div id="mission-marker" class="mission-marker" style="display:none;"></div>
+        <div id="vehicle1" class="vehicle"></div>
+        <div id="vehicle2" class="vehicle"></div>
+        <div id="police1" class="police"></div>
+        <div id="police2" class="police"></div>
+        <div id="building1" class="building"></div>
+        <div id="building2" class="building"></div>
+        <div id="building3" class="building"></div>
+    </div>
+
+    <div id="controls">
+        <div class="control-button" id="up">↑</div>
+        <div class="control-button" id="down">↓</div>
+        <div class="control-button" id="left">←</div>
+        <div class="control-button" id="right">→</div>
+    </div>
+
+    <div id="mission-info">
+        <p>Current Mission: None</p>
+        <p>Reputation: 0</p>
+    </div>
+
+    <div id="weapon-info">
+        <p>Current Weapon: None</p>
+    </div>
+
+    <div id="weapon-switch">
+        <div class="weapon-button" id="weapon1">Pistol</div>
+        <div class="weapon-button" id="weapon2">Shotgun</div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const map = document.getElementById('map');
+        const controls = document.getElementById('controls');
+        const missionInfo = document.getElementById('mission-info');
+        const missionMarker = document.getElementById('mission-marker');
+        const weaponInfo = document.getElementById('weapon-info');
+        const weaponSwitch = document.getElementById('weapon-switch');
+        const vehicle1 = document.getElementById('vehicle1');
+        const vehicle2 = document.getElementById('vehicle2');
+        const police1 = document.getElementById('police1');
+        const police2 = document.getElementById('police2');
+        const building1 = document.getElementById('building1');
+        const building2 = document.getElementById('building2');
+        const building3 = document.getElementById('building3');
+
+        let playerX = 50;
+        let playerY = 50;
+        let mapOffsetX = 0;
+        let mapOffsetY = 0;
+        const playerSpeed = 2;
+        let reputation = 0;
+        let currentMission = null;
+        let currentWeapon = null;
+        let inVehicle = false;
+        let vehicleSpeed = 4;
+        let policeSpeed = 1.5;
+        let policeChaseDistance = 50;
+        let lastCrimeTime = 0;
+        const crimeCooldown = 10000; // 10 seconds
+
+        const missions = [
+            {
+                name: "Package Delivery",
+                description: "Deliver the package to the marked location.",
+                markerX: 75,
+                markerY: 25,
+                reward: 10
+            },
+            // Add more missions here
+        ];
+
+        const weapons = [
+            { name: "Pistol", damage: 10 },
+            { name: "Shotgun", damage: 20 }
+        ];
+
+        function startMission(mission) {
+            currentMission = mission;
+            missionInfo.querySelector('p:first-child').textContent = `Mission: ${mission.name}`;
+            missionMarker.style.display = 'block';
+            updateMissionMarker();
+            checkMissionCompletion();
+        }
+
+        function updateMissionMarker() {
+            if (currentMission) {
+                const markerXPixels = (currentMission.markerX / 100) * map.offsetWidth;
+                const markerYPixels = (currentMission.markerY / 100) * map.offsetHeight;
+                missionMarker.style.left = `${markerXPixels}px`;
+                missionMarker.style.top = `${markerYPixels}px`;
+            }
+        }
+
+        function checkMissionCompletion() {
+            if (!currentMission) return;
+
+            const playerLeft = (playerX / 100) * map.offsetWidth;
+            const playerTop = (playerY / 100) * map.offsetHeight;
+
+            const markerLeft = (currentMission.markerX / 100) * map.offsetWidth;
+            const markerTop = (currentMission.markerY / 100) * map.offsetHeight;
+
+            const distance = Math.sqrt(
+                Math.pow(playerLeft - markerLeft, 2) +
+                Math.pow(playerTop - markerTop, 2)
+            );
+
+            if (distance < 30) {
+                completeMission();
+            }
+        }
+
+        function completeMission() {
+            reputation += currentMission.reward;
+            missionInfo.querySelector('p:nth-child(2)').textContent = `Reputation: ${reputation}`;
+            alert(`Mission "${currentMission.name}" completed!`);
+            missionMarker.style.display = 'none';
+            currentMission = null;
+            missionInfo.querySelector('p:first-child').textContent = "Current Mission: None";
+        }
+
+        function updatePlayerPosition() {
+            const playerXPixels = (playerX / 100) * map.offsetWidth;
+            const playerYPixels = (playerY / 100) * map.offsetHeight;
+
+            player.style.left = `${playerXPixels}px`;
+            player.style.top = `${playerYPixels}px`;
+
+            mapOffsetX = -playerXPixels + (window.innerWidth / 2);
+            mapOffsetY = -playerYPixels + (window.innerHeight / 2);
+
+            mapOffsetX = Math.max(mapOffsetX, -(map.offsetWidth - window.innerWidth));
+            mapOffsetX = Math.min(mapOffsetX, 0);
+            mapOffsetY = Math.max(mapOffsetY, -(map.offsetHeight - window.innerHeight));
+            mapOffsetY = Math.min(mapOffsetY, 0);
+
+            map.style.transform = `translate(${mapOffsetX}px, ${mapOffsetY}px)`;
+            checkMissionCompletion();
+            checkCollisions();
+        }
+
+        function move(direction) {
+            let newPlayerX = playerX;
+            let newPlayerY = playerY;
+
+            switch (direction) {
+                case 'up':
+                    newPlayerY -= inVehicle ? vehicleSpeed : playerSpeed;
+                    break;
+                case 'down':
+                    newPlayerY += inVehicle ? vehicleSpeed : playerSpeed;
+                    break;
+                case 'left':
+                    newPlayerX -= inVehicle ? vehicleSpeed : playerSpeed;
+                    break;
+                case 'right':
+                    newPlayerX += inVehicle ? vehicleSpeed : playerSpeed;
+                    break;
+            }
+
+            newPlayerX = Math.max(0, Math.min(100, newPlayerX));
+            newPlayerY = Math.max(0, Math.min(100, newPlayerY));
+
+            if (newPlayerX !== playerX || newPlayerY !== playerY) {
+                playerX = newPlayerX;
+                playerY = newPlayerY;
+                updatePlayerPosition();
+            }
+        }
+
+        function switchWeapon(weaponIndex) {
+            currentWeapon = weapons[weaponIndex];
+            weaponInfo.querySelector('p').textContent = `Current Weapon: ${currentWeapon.name}`;
+        }
+
+        function fireWeapon() {
+            if (!currentWeapon) return;
+            alert(`Fired ${currentWeapon.name}!`);
+            lastCrimeTime = Date.now();
+        }
+
+        function checkCollisions() {
+            const playerRect = player.getBoundingClientRect();
+            const vehicle1Rect = vehicle1.getBoundingClientRect();
+            const vehicle2Rect = vehicle2.getBoundingClientRect();
+            const police1Rect = police1.getBoundingClientRect();
+            const police2Rect = police2.getBoundingClientRect();
+            const building1Rect = building1.getBoundingClientRect();
+            const building2Rect = building2.getBoundingClientRect();
+            const building3Rect = building3.getBoundingClientRect();
+
+            if (isColliding(playerRect, vehicle1Rect)) {
+                if (inVehicle) {
+                    inVehicle = false;
+                    playerSpeed = 2;
+                } else {
+                    inVehicle = true;
+                    playerSpeed = vehicleSpeed;
+                }
+            }
+
+            if (isColliding(playerRect, vehicle2Rect)) {
+                if (inVehicle) {
+                    inVehicle = false;
+                    playerSpeed = 2;
+                } else {
+                    inVehicle = true;
+                    playerSpeed = vehicleSpeed;
+                }
+            }
+
+            if (isColliding(playerRect, police1Rect) || isColliding(playerRect, police2Rect)) {
+                alert("Busted!");
+                reputation -= 10;
+                missionInfo.querySelector('p:nth-child(2)').textContent = `Reputation: ${reputation}`;
+                resetPlayerPosition();
+            }
+
+            if (isColliding(playerRect, building1Rect) || isColliding(playerRect, building2Rect) || isColliding(playerRect, building3Rect)) {
+                alert("Cannot enter building!");
+                resetPlayerPosition();
+            }
+        }
+
+        function isColliding(rect1, rect2) {
+            return !(
+                rect1.right < rect2.left ||
+                rect1.left > rect2.right ||
+                rect1.bottom < rect2.top ||
+                rect1.top > rect2.bottom
+            );
+        }
+
+        function resetPlayerPosition() {
+            playerX = 50;
+            playerY = 50;
+            updatePlayerPosition();
+        }
+
+        function updatePolicePosition(police, policeX, policeY) {
+            const policeXPixels = (policeX / 100) * map.offsetWidth;
+            const policeYPixels = (policeY / 100) * map.offsetHeight;
+
+            police.style.left = `${policeXPixels}px`;
+            police.style.top = `${policeYPixels}px`;
+
+            const playerLeft = (playerX / 100) * map.offsetWidth;
+            const playerTop = (playerY / 100) * map.offsetHeight;
+
+            const distance = Math.sqrt(
+                Math.pow(playerLeft - policeXPixels, 2) +
+                Math.pow(playerTop - policeYPixels, 2)
+            );
+
+            if (distance < policeChaseDistance && (Date.now() - lastCrimeTime < crimeCooldown)) {
+                const angle = Math.atan2(playerTop - policeYPixels, playerLeft - policeXPixels);
+                policeX += Math.cos(angle) * policeSpeed;
+                policeY += Math.sin(angle) * policeSpeed;
+            } else {
+                policeX += (Math.random() - 0.5) * policeSpeed;
+                policeY += (Math.random() - 0.5) * policeSpeed;
+            }
+
+            policeX = Math.max(0, Math.min(100, policeX));
+            policeY = Math.max(0, Math.min(100, policeY));
+
+            return { policeX, policeY };
+        }
+
+        function updateVehiclePosition(vehicle, vehicleX, vehicleY) {
+            const vehicleXPixels = (vehicleX / 100) * map.offsetWidth;
+            const vehicleYPixels = (vehicleY / 100) * map.offsetHeight;
+
+            vehicle.style.left = `${vehicleXPixels}px`;
+            vehicle.style.top = `${vehicleYPixels}px`;
+
+            vehicleX += (Math.random() - 0.5) * vehicleSpeed;
+            vehicleY += (Math.random() - 0.5) * vehicleSpeed;
+
+            vehicleX = Math.max(0, Math.min(100, vehicleX));
+            vehicleY = Math.max(0, Math.min(100, vehicleY));
+
+            return { vehicleX, vehicleY };
+        }
+
+        let police1X = 60;
+        let police1Y = 60;
+        let police2X = 40;
+        let police2Y = 40;
+        let vehicle1X = 70;
+        let vehicle1Y = 70;
+        let vehicle2X = 30;
+        let vehicle2Y = 30;
+
+        function gameLoop() {
+            const { policeX: newPolice1X, policeY: newPolice1Y } = updatePolicePosition(police1, police1X, police1Y);
+            const { policeX: newPolice2X, policeY: newPolice2Y } = updatePolicePosition(police2, police2X, police2Y);
+            const { vehicleX: newVehicle1X, vehicleY: newVehicle1Y } = updateVehiclePosition(vehicle1, vehicle1X, vehicle1Y);
+            const { vehicleX: newVehicle2X, vehicleY: newVehicle2Y } = updateVehiclePosition(vehicle2, vehicle2X, vehicle2Y);
+
+            police1X = newPolice1X;
+            police1Y = newPolice1Y;
+            police2X = newPolice2X;
+            police2Y = newPolice2Y;
+            vehicle1X = newVehicle1X;
+            vehicle1Y = newVehicle1Y;
+            vehicle2X = newVehicle2X;
+            vehicle2Y = newVehicle2Y;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        controls.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.target.classList.contains('control-button')) {
+                const direction = e.target.id;
+                move(direction);
+            }
+        });
+
+        controls.addEventListener('touchend', (e) => {
+            e.preventDefault();
+        });
+
+        weaponSwitch.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.target.classList.contains('weapon-button')) {
+                const weaponIndex = e.target.id === 'weapon1' ? 0 : 1;
+                switchWeapon(weaponIndex);
+            }
+        });
+
+        weaponSwitch.addEventListener('touchend', (e) => {
+            e.preventDefault();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ') {
+                fireWeapon();
+            }
+        });
+
+        updatePlayerPosition();
+        startMission(missions[0]);
+        updateMissionMarker();
+        gameLoop();
+    </script>
+</body>
+</html>
