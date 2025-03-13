@@ -11,12 +11,33 @@ class Map:
         self.height = 1800
         
         try:
-            # Load and scale the map image
-            self.map_image = pygame.image.load('attached_assets/IMG_7818.jpeg').convert()
-            self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
-            print("Successfully loaded map image")
+            # Load and scale the map image - try multiple possible paths
+            image_paths = [
+                'attached_assets/IMG_7818.jpeg',  
+                '/home/runner/workspace/attached_assets/IMG_7818.jpeg',
+                './attached_assets/IMG_7818.jpeg',
+                '/tmp/attached_assets/IMG_7818.jpeg',
+                'IMG_7818.jpeg'
+            ]
+            
+            loaded = False
+            for path in image_paths:
+                try:
+                    print(f"Trying to load image from: {path}")
+                    self.map_image = pygame.image.load(path).convert()
+                    self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
+                    print(f"Successfully loaded map image from {path}")
+                    loaded = True
+                    break
+                except Exception as path_error:
+                    print(f"Could not load from {path}: {path_error}")
+            
+            if not loaded:
+                raise Exception("Could not load image from any path")
+                
         except Exception as e:
             print(f"Error loading map image: {e}")
+            print("Creating fallback surface...")
             # Create fallback surface if image fails to load
             self.map_image = pygame.Surface((self.width, self.height))
             self.map_image.fill((100, 100, 100))  # Gray background
@@ -26,6 +47,7 @@ class Map:
                 pygame.draw.line(self.map_image, road_color, (x, 0), (x, self.height), 20)
             for y in range(0, self.height, 200):
                 pygame.draw.line(self.map_image, road_color, (0, y), (self.width, y), 20)
+            print("Fallback surface created.")
 
         self.tile_size = 32
         self.walls = []
@@ -100,11 +122,71 @@ class Map:
             self.roads.append({"rect": pygame.Rect(x, 0, road_width, self.height), "horizontal": False})
 
     def draw(self, screen, camera_x, camera_y):
-        # Draw the map image
-        view_rect = pygame.Rect(camera_x, camera_y, screen.get_width(), screen.get_height())
-        screen.blit(self.map_image, (0, 0), view_rect)
+        try:
+            # Draw the map image
+            if not hasattr(self, 'map_image') or self.map_image is None:
+                print("WARNING: Map image is missing, drawing fallback grid")
+                # Draw a placeholder grid
+                for x in range(0, self.width, 100):
+                    for y in range(0, self.height, 100):
+                        rect = pygame.Rect(
+                            x - camera_x, 
+                            y - camera_y,
+                            100, 100
+                        )
+                        pygame.draw.rect(screen, (50, 50, 50), rect, 1)
+            else:
+                # Draw a solid color background first to ensure something is visible
+                screen.fill((100, 100, 100))  # Medium gray background
+                
+                # Draw the map with fixed positioning (no view_rect)
+                map_pos = (-camera_x, -camera_y)
+                screen.blit(self.map_image, map_pos)
+                
+                if not hasattr(self, '_first_draw'):
+                    print("Map drawn successfully")
+                    self._first_draw = True
+                    print(f"Drawing map at position: {map_pos}")
+                    print(f"Camera position: ({camera_x}, {camera_y})")
+                    print(f"Map dimensions: {self.map_image.get_size()}")
 
-        # Apply time of day lighting effect
+            # Draw a debug grid to help with positioning
+            grid_size = 100
+            grid_color = (200, 200, 200, 30)  # Very light gray, semi-transparent
+            
+            # Create transparent surface for grid
+            grid_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+            
+            # Draw vertical grid lines
+            for x in range(0, self.width, grid_size):
+                screen_x = x - camera_x
+                if 0 <= screen_x < screen.get_width():
+                    pygame.draw.line(grid_surface, grid_color, 
+                                   (screen_x, 0), 
+                                   (screen_x, screen.get_height()))
+            
+            # Draw horizontal grid lines
+            for y in range(0, self.height, grid_size):
+                screen_y = y - camera_y
+                if 0 <= screen_y < screen.get_height():
+                    pygame.draw.line(grid_surface, grid_color, 
+                                   (0, screen_y), 
+                                   (screen.get_width(), screen_y))
+            
+            # Draw center markers
+            center_x = self.width/2 - camera_x
+            center_y = self.height/2 - camera_y
+            if 0 <= center_x < screen.get_width() and 0 <= center_y < screen.get_height():
+                pygame.draw.circle(grid_surface, (255, 0, 0, 100), (int(center_x), int(center_y)), 10)
+            
+            # Blit grid to screen
+            screen.blit(grid_surface, (0, 0))
+            
+            # Apply time of day lighting effect
+        except Exception as e:
+            print(f"Error in Map.draw(): {e}")
+            import traceback
+            traceback.print_exc()
         light_level = self.get_light_level()
         if light_level < 1.0:
             # Create a semi-transparent dark overlay for night time
@@ -614,151 +696,175 @@ class Player:
             self.rect = new_rect
 
     def draw(self, screen, camera_x, camera_y):
-        screen_x = self.x - camera_x
-        screen_y = self.y - camera_y
+        try:
+            screen_x = self.x - camera_x
+            screen_y = self.y - camera_y
+            
+            # Debug output on first draw
+            if not hasattr(self, '_first_draw'):
+                print(f"Player drawing: world pos ({self.x}, {self.y}), screen pos ({screen_x}, {screen_y})")
+                print(f"Camera position: ({camera_x}, {camera_y})")
+                self._first_draw = True
 
-        # Create a surface for the character with transparency
-        char_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+            # Create a surface for the character with transparency
+            char_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
 
-        # Animation offsets
-        walk_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
-        head_bob = math.sin(self.animation_frame * math.pi * 2) * 1.5  # South Park style head bob
+            # Animation offsets
+            walk_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
+            head_bob = math.sin(self.animation_frame * math.pi * 2) * 1.5  # South Park style head bob
 
-        # Draw character from top-down perspective
-        # Head (South Park Canadian style)
-        head_top = self.size - head_bob
-        head_bottom = self.size + head_bob
-        head_width = self.size * 0.8
+            # Draw character from top-down perspective
+            # Head (South Park Canadian style)
+            head_top = self.size - head_bob
+            head_bottom = self.size + head_bob
+            head_width = self.size * 0.8
+            
+            # Add debug outline to make character more visible
+            pygame.draw.rect(char_surface, (255, 255, 0, 100), (0, 0, self.size * 2, self.size * 2), 1)
 
-        # Top of head
-        pygame.draw.ellipse(
-            char_surface,
-            self.colors['skin'],
-            (self.size - head_width/2, head_top - head_width/2, head_width, head_width)
-        )
+            # Top of head (bigger for visibility)
+            pygame.draw.ellipse(
+                char_surface,
+                self.colors['skin'],
+                (self.size - head_width/2, head_top - head_width/2, head_width, head_width)
+            )
 
-        # Bottom of head
-        pygame.draw.ellipse(
-            char_surface,
-            self.colors['skin'],
-            (self.size - head_width/2, head_bottom - head_width/2, head_width * 0.8, head_width * 0.4)
-        )
+            # Bottom of head
+            pygame.draw.ellipse(
+                char_surface,
+                self.colors['skin'],
+                (self.size - head_width/2, head_bottom - head_width/2, head_width * 0.8, head_width * 0.4)
+            )
+        
+            # Beady eyes
+            eye_size = 2
+            eye_spacing = 4
+            pygame.draw.circle(
+                char_surface,
+                self.colors['eyes'],
+                (self.size - eye_spacing, self.size),
+                eye_size
+            )
+            pygame.draw.circle(
+                char_surface,
+                self.colors['eyes'],
+                (self.size + eye_spacing, self.size),
+                eye_size
+            )
 
-        # Beady eyes
-        eye_size = 2
-        eye_spacing = 4
-        pygame.draw.circle(
-            char_surface,
-            self.colors['eyes'],
-            (self.size - eye_spacing, self.size),
-            eye_size
-        )
-        pygame.draw.circle(
-            char_surface,
-            self.colors['eyes'],
-            (self.size + eye_spacing, self.size),
-            eye_size
-        )
-
-        # Body (simple oval shape)
-        body_points = [
-            (self.size - self.size * 0.3, self.size + head_width * 0.3),    # Top left
-            (self.size + self.size * 0.3, self.size + head_width * 0.3),    # Top right
-            (self.size + self.size * 0.4, self.size + self.size * 0.6),     # Bottom right
-            (self.size - self.size * 0.4, self.size + self.size * 0.6)      # Bottom left
-        ]
-        pygame.draw.polygon(char_surface, self.colors['shirt'], body_points)
-
-        # Legs with walking animation
-        if self.moving:
-            leg_offset = walk_offset * 1.5
-            # Left leg
-            left_leg = [
-                (self.size - self.size * 0.25, self.size + self.size * 0.5),
-                (self.size - self.size * 0.15, self.size + self.size * 0.5),
-                (self.size - self.size * 0.2 + leg_offset, self.size + self.size * 0.8),
-                (self.size - self.size * 0.3 + leg_offset, self.size + self.size * 0.8)
+            # Body (simple oval shape)
+            body_points = [
+                (self.size - self.size * 0.3, self.size + head_width * 0.3),    # Top left
+                (self.size + self.size * 0.3, self.size + head_width * 0.3),    # Top right
+                (self.size + self.size * 0.4, self.size + self.size * 0.6),     # Bottom right
+                (self.size - self.size * 0.4, self.size + self.size * 0.6)      # Bottom left
             ]
-            # Right leg
-            right_leg = [
-                (self.size + self.size * 0.15, self.size + self.size * 0.5),
-                (self.size + self.size * 0.25, self.size + self.size * 0.5),
-                (self.size + self.size * 0.3 - leg_offset, self.size + self.size * 0.8),
-                (self.size + self.size * 0.2 - leg_offset, self.size + self.size * 0.8)
-            ]
-            pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
-            pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
+            pygame.draw.polygon(char_surface, self.colors['shirt'], body_points)
 
-            # Shoes
-            pygame.draw.circle(char_surface, self.colors['shoes'],
-                             (self.size - self.size * 0.25 + leg_offset, self.size + self.size * 0.8), 3)
-            pygame.draw.circle(char_surface, self.colors['shoes'],
-                             (self.size + self.size * 0.25 - leg_offset, self.size + self.size * 0.8), 3)
-        else:
-            # Standing still legs
-            left_leg = [
-                (self.size - self.size * 0.25, self.size + self.size * 0.5),
-                (self.size- self.size * 0.15, self.size + self.size * 0.5),
-                (self.size - self.size * 0.2, self.size + self.size * 0.8),
-                (self.size - self.size * 0.3, self.size + self.size * 0.8)
-            ]
-            right_leg = [
-                (self.size + self.size * 0.15, self.size + self.size * 0.5),
-                (self.size + self.size * 0.25, self.size + self.size * 0.5),
-                (self.size + self.size * 0.3, self.size + self.size * 0.8),
-                (self.size + self.size * 0.2, self.size + self.size * 0.8)
-            ]
-            pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
-            pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
+            # Draw the rest of the character
+            if self.moving:
+                leg_offset = walk_offset * 1.5
+                # Left leg
+                left_leg = [
+                    (self.size - self.size * 0.25, self.size + self.size * 0.5),
+                    (self.size - self.size * 0.15, self.size + self.size * 0.5),
+                    (self.size - self.size * 0.2 + leg_offset, self.size + self.size * 0.8),
+                    (self.size - self.size * 0.3 + leg_offset, self.size + self.size * 0.8)
+                ]
+                # Right leg
+                right_leg = [
+                    (self.size + self.size * 0.15, self.size + self.size * 0.5),
+                    (self.size + self.size * 0.25, self.size + self.size * 0.5),
+                    (self.size + self.size * 0.3 - leg_offset, self.size + self.size * 0.8),
+                    (self.size + self.size * 0.2 - leg_offset, self.size + self.size * 0.8)
+                ]
+                pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
+                pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
 
-            # Shoes
-            pygame.draw.circle(char_surface, self.colors['shoes'],
-                             (self.size - self.size * 0.25, self.size + self.size * 0.8), 3)
-            pygame.draw.circle(char_surface, self.colors['shoes'],
-                             (self.size + self.size * 0.25, self.size + self.size * 0.8), 3)
+                # Shoes
+                pygame.draw.circle(char_surface, self.colors['shoes'],
+                                 (self.size - self.size * 0.25 + leg_offset, self.size + self.size * 0.8), 3)
+                pygame.draw.circle(char_surface, self.colors['shoes'],
+                                 (self.size + self.size * 0.25 - leg_offset, self.size + self.size * 0.8), 3)
+            else:
+                # Draw standing legs
+                left_leg = [
+                    (self.size - self.size * 0.25, self.size + self.size * 0.5),
+                    (self.size- self.size * 0.15, self.size + self.size * 0.5),
+                    (self.size - self.size * 0.2, self.size + self.size * 0.8),
+                    (self.size - self.size * 0.3, self.size + self.size * 0.8)
+                ]
+                right_leg = [
+                    (self.size + self.size * 0.15, self.size + self.size * 0.5),
+                    (self.size + self.size * 0.25, self.size + self.size * 0.5),
+                    (self.size + self.size * 0.3, self.size + self.size * 0.8),
+                    (self.size + self.size * 0.2, self.size + self.size * 0.8)
+                ]
+                pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
+                pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
 
-        # Draw weapon if player has one and not in vehicle
-        if self.has_weapon and not self.in_vehicle:
-            # Calculate weapon position based on direction
-            if self.direction == 'right':
-                weapon_x = self.size + self.size * 0.5
-                weapon_y = self.size + self.size * 0.2
-                weapon_angle = 0
-            elif self.direction == 'left':
-                weapon_x = self.size - self.size * 0.5
-                weapon_y = self.size + self.size * 0.2
-                weapon_angle = 180
-            elif self.direction == 'up':
-                weapon_x = self.size
-                weapon_y = self.size - self.size * 0.4
-                weapon_angle = 270
-            else:  # down
-                weapon_x = self.size
-                weapon_y = self.size + self.size * 0.6
-                weapon_angle = 90
+                # Shoes
+                pygame.draw.circle(char_surface, self.colors['shoes'],
+                                 (self.size - self.size * 0.25, self.size + self.size * 0.8), 3)
+                pygame.draw.circle(char_surface, self.colors['shoes'],
+                                 (self.size + self.size * 0.25, self.size + self.size * 0.8), 3)
 
-            # Draw the weapon (simple rectangle)
-            weapon_length = 8
-            weapon_width = 3
-            weapon_surface = pygame.Surface((weapon_length, weapon_width), pygame.SRCALPHA)
-            pygame.draw.rect(weapon_surface, (80, 80, 80), (0, 0, weapon_length, weapon_width))
+            # Draw weapon if player has one and not in vehicle
+            if self.has_weapon and not self.in_vehicle:
+                # Draw weapon with bright highlight for visibility
+                if self.direction == 'right':
+                    weapon_x = self.size + self.size * 0.5
+                    weapon_y = self.size + self.size * 0.2
+                    weapon_angle = 0
+                elif self.direction == 'left':
+                    weapon_x = self.size - self.size * 0.5
+                    weapon_y = self.size + self.size * 0.2
+                    weapon_angle = 180
+                elif self.direction == 'up':
+                    weapon_x = self.size
+                    weapon_y = self.size - self.size * 0.4
+                    weapon_angle = 270
+                else:  # down
+                    weapon_x = self.size
+                    weapon_y = self.size + self.size * 0.6
+                    weapon_angle = 90
 
-            # Rotate weapon based on direction
-            rotated_weapon = pygame.transform.rotate(weapon_surface, -weapon_angle)
+                # Draw the weapon (simple rectangle with glow for visibility)
+                weapon_length = 10  # Slightly bigger
+                weapon_width = 3
+                weapon_surface = pygame.Surface((weapon_length, weapon_width), pygame.SRCALPHA)
+                pygame.draw.rect(weapon_surface, (255, 100, 0), (0, 0, weapon_length, weapon_width))  # Bright orange
+                
+                # Add glow effect
+                glow_surface = pygame.Surface((weapon_length+4, weapon_width+4), pygame.SRCALPHA)
+                pygame.draw.rect(glow_surface, (255, 255, 0, 100), (0, 0, weapon_length+4, weapon_width+4))  # Yellow glow
 
-            # Draw weapon on character
-            char_surface.blit(rotated_weapon, 
-                            (weapon_x - rotated_weapon.get_width()/2, 
-                             weapon_y - rotated_weapon.get_height()/2))
+                # Rotate weapon based on direction
+                rotated_weapon = pygame.transform.rotate(weapon_surface, -weapon_angle)
+                rotated_glow = pygame.transform.rotate(glow_surface, -weapon_angle)
 
-        # Apply character direction
-        if self.direction == 'left':
-            char_surface = pygame.transform.flip(char_surface, True, False)
+                # Draw weapon glow on character
+                char_surface.blit(rotated_glow, 
+                                (weapon_x - rotated_glow.get_width()/2, 
+                                 weapon_y - rotated_glow.get_height()/2))
+                                 
+                # Draw weapon on character
+                char_surface.blit(rotated_weapon, 
+                                (weapon_x - rotated_weapon.get_width()/2, 
+                                 weapon_y - rotated_weapon.get_height()/2))
 
-        # Draw the character surface onto the screen
-        screen.blit(char_surface, 
-                   (screen_x - char_surface.get_width()/2,
-                    screen_y - char_surface.get_height()/2))
+            # Apply character direction
+            if self.direction == 'left':
+                char_surface = pygame.transform.flip(char_surface, True, False)
+
+            # Draw the character surface onto the screen
+            screen.blit(char_surface, 
+                       (screen_x - char_surface.get_width()/2,
+                        screen_y - char_surface.get_height()/2))
+        except Exception as e:
+            print(f"Error in player.draw(): {e}")
+            import traceback
+            traceback.print_exc()
 
     def enter_exit_vehicle(self, vehicles):
         if self.vehicle_entry_cooldown > 0:
@@ -1540,10 +1646,23 @@ class Game:
         os.environ['SDL_VIDEODRIVER'] = 'x11'
         os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'  # Force software rendering
 
-        pygame.init()
+        # Don't re-initialize pygame if already done
+        if not pygame.get_init():
+            pygame.init()
+            
+        # Print detailed screen information
+        print("Creating display...")
+        
         self.width = 800
         self.height = 600
-        self.screen = pygame.display.set_mode((self.width, self.height))
+        
+        try:
+            self.screen = pygame.display.set_mode((self.width, self.height))
+            print(f"Display mode set: {self.width}x{self.height}")
+        except Exception as e:
+            print(f"Error setting display mode: {e}")
+            raise
+            
         pygame.display.set_caption("Cartel City")
 
         # Create game objects
@@ -1558,9 +1677,16 @@ class Game:
 
         self.player = Player(spawn_x, spawn_y)
 
-        # Initialize camera
+        # Initialize camera centered on player
         self.camera_x = self.player.x - self.width/2
         self.camera_y = self.player.y - self.height/2
+        
+        # Force camera to valid position
+        self.camera_x = max(0, min(self.camera_x, self.map.width - self.width))
+        self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
+        
+        print(f"Initial player position: ({self.player.x}, {self.player.y})")
+        print(f"Initial camera position: ({self.camera_x}, {self.camera_y})")
 
         # Game state
         self.running = True
@@ -1873,6 +1999,7 @@ class Game:
         self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
 
     def run(self):
+        print("Game.run() started")
         while self.running:
             # Handle events
             self.handle_events()
@@ -1880,9 +2007,16 @@ class Game:
             # Get keyboard state
             keys = pygame.key.get_pressed()
 
+            # Clear screen for each frame
+            self.screen.fill((0, 0, 0))
+            
+            # Print debug once to see if we're getting here
+            if hasattr(self, '_first_run') == False:
+                print("First frame rendering...")
+                self._first_run = True
+            
             # Only update game state if not paused
             if not self.paused:
-                # Handle player movement
                 if not self.player.in_vehicle:
                     dx = 0
                     dy = 0
@@ -1966,8 +2100,19 @@ class Game:
             if self.paused:
                 self.draw_pause_menu()
 
-            # Update display
-            pygame.display.flip()
+            # Ensure the display is updated
+            try:
+                # Use both update and flip to ensure rendering
+                pygame.display.update()
+                pygame.display.flip()
+                
+                if not hasattr(self, '_display_updated'):
+                    print("First display update successful")
+                    self._display_updated = True
+            except Exception as e:
+                print(f"Error updating display: {e}")
+                
+            # Control frame rate
             self.clock.tick(60)
 
 def detect_mobile():
@@ -1988,17 +2133,29 @@ def main():
     # Force mobile controls on for testing (remove this line later)
     is_mobile = True
     
-    game = Game()
-    
-    # Set touch mode based on device
-    game.touch_enabled = is_mobile
-    
-    # If we're on mobile, adjust display settings
-    if is_mobile:
-        print("Mobile device detected, enabling touch controls")
-        # Could adjust other settings here like UI scaling
-    
-    game.run()
+    try:
+        pygame.init()
+        print("Pygame initialized successfully")
+        
+        # Print display info
+        print(f"Display driver: {pygame.display.get_driver()}")
+        print(f"Display info: {pygame.display.Info()}")
+        
+        game = Game()
+        
+        # Set touch mode based on device
+        game.touch_enabled = is_mobile
+        
+        # If we're on mobile, adjust display settings
+        if is_mobile:
+            print("Mobile device detected, enabling touch controls")
+            # Could adjust other settings here like UI scaling
+        
+        game.run()
+    except Exception as e:
+        print(f"Error in main: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
