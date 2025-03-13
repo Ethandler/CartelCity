@@ -1238,18 +1238,27 @@ class Pedestrian:
 
     class Map:
         def __init__(self):
+            self.width = 2400  # Fixed size for consistent gameplay
+            self.height = 1800
             try:
-                # Load and scale the map image
+                # Try to load the map image
                 self.map_image = pygame.image.load('attached_assets/IMG_7818.jpeg').convert()
-                # Scale image to a reasonable size
-                self.width = 2400  # Fixed size for consistent gameplay
-                self.height = 1800
                 self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
             except pygame.error as e:
                 print(f"Error loading map image: {e}")
-                # Create fallback surface if image fails to load
-                self.map_image = pygame.Surface((self.width, self.height))
-                self.map_image.fill((100, 100, 100))  # Gray background
+                try:
+                    # Try to use our procedural map generator
+                    import procedural_map
+                    print("Generating procedural map...")
+                    map_surface = procedural_map.generate_city_map(self.width, self.height)
+                    map_path = procedural_map.save_map(map_surface)
+                    self.map_image = map_surface
+                    print(f"Using procedural map: {map_path}")
+                except Exception as e2:
+                    print(f"Error generating procedural map: {e2}")
+                    # Create very basic fallback surface if all else fails
+                    self.map_image = pygame.Surface((self.width, self.height))
+                    self.map_image.fill((100, 100, 100))  # Gray background
 
             self.tile_size = 32
             self.walls = []
@@ -1280,32 +1289,68 @@ class Pedestrian:
                 # Create roads based on image analysis
                 surface_array = pygame.surfarray.array3d(self.map_image)
                 road_threshold = 100  # Adjust based on your image
+                
+                # Detect if we're using the procedural map
+                using_procedural = False
+                if hasattr(self.map_image, 'get_at'):
+                    center_color = self.map_image.get_at((self.width // 2, self.height // 2))
+                    # If the center pixel is in the procedural map color range
+                    if 40 <= center_color[0] <= 160 and 40 <= center_color[1] <= 160 and 40 <= center_color[2] <= 160:
+                        using_procedural = True
+                        road_threshold = 60  # Better threshold for procedural map
 
                 # Sample points in the image to detect roads
                 step = 32  # Sample every 32 pixels
                 for x in range(0, self.width, step):
                     for y in range(0, self.height, step):
-                        # Get average brightness of area
-                        area = surface_array[x:min(x+step, self.width), 
-                                          y:min(y+step, self.height)]
-                        brightness = area.mean()
+                        try:
+                            # Get average brightness of area
+                            area = surface_array[x:min(x+step, self.width), 
+                                              y:min(y+step, self.height)]
+                            brightness = area.mean()
 
-                        if brightness < road_threshold:
-                            # Dark area - likely a road
-                            is_horizontal = True if area.shape[1] > area.shape[0] else False
-                            road = pygame.Rect(x, y, step, step)
-                            self.roads.append({"rect": road, "horizontal": is_horizontal})
+                            if brightness < road_threshold:
+                                # Dark area - likely a road
+                                is_horizontal = True if area.shape[1] > area.shape[0] else False
+                                
+                                # For procedural map, we can more reliably check if it's a horizontal or vertical road
+                                if using_procedural:
+                                    # Check width vs height of the dark area
+                                    h_count = 0
+                                    v_count = 0
+                                    
+                                    # Check horizontally
+                                    for i in range(max(0, x-step*2), min(self.width, x+step*3), step):
+                                        sample_y = y + step//2
+                                        if sample_y < self.height and i < self.width:
+                                            if surface_array[i, sample_y].mean() < road_threshold:
+                                                h_count += 1
+                                    
+                                    # Check vertically
+                                    for j in range(max(0, y-step*2), min(self.height, y+step*3), step):
+                                        sample_x = x + step//2
+                                        if sample_x < self.width and j < self.height:
+                                            if surface_array[sample_x, j].mean() < road_threshold:
+                                                v_count += 1
+                                    
+                                    is_horizontal = h_count >= v_count
+                                
+                                road = pygame.Rect(x, y, step, step)
+                                self.roads.append({"rect": road, "horizontal": is_horizontal})
 
-                            # Add walls along road edges
-                            wall_width = 8
-                            if is_horizontal:
-                                # Add walls above and below road
-                                self.walls.append({"rect": pygame.Rect(x, y - wall_width, step, wall_width)})
-                                self.walls.append({"rect": pygame.Rect(x, y + step, step, wall_width)})
-                            else:
-                                # Add walls to left and right of road
-                                self.walls.append({"rect": pygame.Rect(x - wall_width, y, wall_width, step)})
-                                self.walls.append({"rect": pygame.Rect(x + step, y, wall_width, step)})
+                                # Add walls along road edges
+                                wall_width = 8
+                                if is_horizontal:
+                                    # Add walls above and below road
+                                    self.walls.append({"rect": pygame.Rect(x, y - wall_width, step, wall_width)})
+                                    self.walls.append({"rect": pygame.Rect(x, y + step, step, wall_width)})
+                                else:
+                                    # Add walls to left and right of road
+                                    self.walls.append({"rect": pygame.Rect(x - wall_width, y, wall_width, step)})
+                                    self.walls.append({"rect": pygame.Rect(x + step, y, wall_width, step)})
+                        except IndexError:
+                            # This can happen at the edges of the image
+                            continue
             except Exception as e:
                 print(f"Error creating city layout: {e}")
                 # Create fallback layout
