@@ -6,18 +6,26 @@ import os
 
 class Map:
     def __init__(self):
+        # Set default size first
+        self.width = 2400  # Fixed size for consistent gameplay
+        self.height = 1800
+        
         try:
             # Load and scale the map image
             self.map_image = pygame.image.load('attached_assets/IMG_7818.jpeg').convert()
-            # Scale image to a reasonable size
-            self.width = 2400  # Fixed size for consistent gameplay
-            self.height = 1800
             self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
-        except pygame.error as e:
+            print("Successfully loaded map image")
+        except Exception as e:
             print(f"Error loading map image: {e}")
             # Create fallback surface if image fails to load
             self.map_image = pygame.Surface((self.width, self.height))
             self.map_image.fill((100, 100, 100))  # Gray background
+            # Draw some road grid pattern for visibility
+            road_color = (50, 50, 50)
+            for x in range(0, self.width, 200):
+                pygame.draw.line(self.map_image, road_color, (x, 0), (x, self.height), 20)
+            for y in range(0, self.height, 200):
+                pygame.draw.line(self.map_image, road_color, (0, y), (self.width, y), 20)
 
         self.tile_size = 32
         self.walls = []
@@ -1370,7 +1378,7 @@ class Pedestrian:
                     # Place vehicle along vertical road
                     x = road["rect"].x + road["rect"].width // 2  # Center in road
                     y = road["rect"].y + random.randint(0, road["rect"].height - 32)  # Account for vehicle length
-                    rotation = 90 if random.random() > 05 else 270  # Face up or down
+                    rotation = 90 if random.random() > 0.5 else 270  # Face up or down
 
                 vehicle = Vehicle(x, y)
                 vehicle.rotation = rotation  # Set initial rotation based on road direction
@@ -1556,11 +1564,33 @@ class Game:
 
         # Game state
         self.running = True
+        self.paused = False
         self.clock = pygame.time.Clock()
 
         # Debug info
         self.show_debug = False
         self.font = pygame.font.SysFont(None, 24)
+        self.big_font = pygame.font.SysFont(None, 48)
+        
+        # Mobile touch controls
+        self.touch_enabled = True
+        self.touch_buttons = {}
+        self.touch_button_radius = 40
+        self.touch_button_margin = 20
+        self.touch_button_alpha = 180  # Semi-transparent
+        self.touch_active = {}  # Track which buttons are being pressed
+        
+        # Initialize touch controls
+        self.init_touch_controls()
+        
+        # Create pause menu button
+        self.pause_button = {
+            "pos": (self.width - 40, 40),
+            "radius": 30,
+            "color": (100, 100, 100),
+            "label": "II",
+        }
+        self.pause_active = False
 
     def draw_debug_info(self):
         if not self.show_debug:
@@ -1600,12 +1630,234 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_e:
+                if event.key == pygame.K_e and not self.paused:
                     self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
-                elif event.key == pygame.K_SPACE:
+                elif event.key == pygame.K_SPACE and not self.paused:
                     self.player.shoot()
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
+                elif event.key == pygame.K_ESCAPE:
+                    # Toggle pause state with ESC key
+                    self.paused = not self.paused
+            
+            # Touch support for mobile
+            elif event.type == pygame.MOUSEBUTTONDOWN and self.touch_enabled:
+                # Check for pause button press
+                pos = pygame.mouse.get_pos()
+                pause_pos = self.pause_button["pos"]
+                pause_distance = math.sqrt((pos[0] - pause_pos[0])**2 + (pos[1] - pause_pos[1])**2)
+                if pause_distance <= self.pause_button["radius"]:
+                    # Toggle pause state
+                    self.paused = not self.paused
+                    self.pause_active = True
+                    continue  # Skip other button checks when pause is pressed
+                
+                # Only process other buttons when not paused
+                if not self.paused:
+                    # Check if any touch buttons were pressed
+                    for name, button in self.touch_buttons.items():
+                        # Check if touch is within button radius
+                        button_pos = button["pos"]
+                        distance = math.sqrt((pos[0] - button_pos[0])**2 + (pos[1] - button_pos[1])**2)
+                        
+                        if distance <= button["radius"]:
+                            self.touch_active[name] = True
+                            
+                            # Perform action immediately for action buttons
+                            if name == "action":
+                                self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
+                            elif name == "shoot":
+                                self.player.shoot()
+            
+            elif event.type == pygame.MOUSEBUTTONUP and self.touch_enabled:
+                # Reset all touch buttons and pause button
+                for name in self.touch_active:
+                    self.touch_active[name] = False
+                self.pause_active = False
+                    
+            # Track touch movement for continuous control (only when not paused)
+            elif event.type == pygame.MOUSEMOTION and self.touch_enabled and pygame.mouse.get_pressed()[0] and not self.paused:
+                # Check if a direction button is being touched
+                pos = pygame.mouse.get_pos()
+                for name, button in self.touch_buttons.items():
+                    # Only check directional buttons
+                    if name not in ["up", "down", "left", "right"]:
+                        continue
+                        
+                    # Check if touch is within button radius
+                    button_pos = button["pos"]
+                    distance = math.sqrt((pos[0] - button_pos[0])**2 + (pos[1] - button_pos[1])**2)
+                    
+                    if distance <= button["radius"]:
+                        self.touch_active[name] = True
+                    else:
+                        self.touch_active[name] = False
+                        
+    def draw_pause_button(self):
+        """Draw the pause button in the corner of the screen"""
+        if not self.touch_enabled:
+            return
+        
+        # Create semi-transparent surface
+        button_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        
+        # Get button properties
+        color = list(self.pause_button["color"])
+        if self.pause_active or self.paused:
+            # Brighten when active or paused
+            color = [min(c + 70, 255) for c in color]
+        
+        # Add alpha
+        color.append(self.touch_button_alpha)
+        
+        # Draw button
+        pygame.draw.circle(button_surface, color, self.pause_button["pos"], self.pause_button["radius"])
+        
+        # Add label
+        font = pygame.font.SysFont(None, 36)
+        if self.paused:
+            label = font.render("▶", True, (255, 255, 255))  # Play symbol when paused
+        else:
+            label = font.render(self.pause_button["label"], True, (255, 255, 255))
+        label_rect = label.get_rect(center=self.pause_button["pos"])
+        button_surface.blit(label, label_rect)
+        
+        # Blit to screen
+        self.screen.blit(button_surface, (0, 0))
+        
+    def draw_pause_menu(self):
+        """Draw the pause menu with map overview"""
+        if not self.paused:
+            return
+            
+        # Create semi-transparent overlay
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))  # Dark semi-transparent background
+        self.screen.blit(overlay, (0, 0))
+        
+        # Draw title
+        title = self.big_font.render("GAME PAUSED", True, (255, 255, 255))
+        title_rect = title.get_rect(center=(self.width/2, 50))
+        self.screen.blit(title, title_rect)
+        
+        # Draw full map at reduced scale
+        map_scale = 0.25  # Scale to fit on screen
+        map_width = int(self.map.width * map_scale)
+        map_height = int(self.map.height * map_scale)
+        
+        # Create scaled map surface
+        scaled_map = pygame.transform.scale(self.map.map_image, (map_width, map_height))
+        
+        # Calculate position to center map
+        map_x = self.width/2 - map_width/2
+        map_y = self.height/2 - map_height/2 + 20  # +20 to account for title
+        
+        # Draw scaled map
+        self.screen.blit(scaled_map, (map_x, map_y))
+        
+        # Draw player position on map
+        player_map_x = map_x + (self.player.x * map_scale)
+        player_map_y = map_y + (self.player.y * map_scale)
+        pygame.draw.circle(self.screen, (255, 0, 0), (int(player_map_x), int(player_map_y)), 5)
+        
+        # Draw resume instructions
+        instr = self.font.render("Touch pause button or press ESC to resume", True, (255, 255, 255))
+        instr_rect = instr.get_rect(center=(self.width/2, self.height - 50))
+        self.screen.blit(instr, instr_rect)
+
+    def init_touch_controls(self):
+        """Initialize touch control buttons and their positions"""
+        # D-pad positions (bottom left)
+        center_x = self.touch_button_margin + self.touch_button_radius * 3
+        center_y = self.height - self.touch_button_margin - self.touch_button_radius * 3
+        
+        # Direction buttons (D-pad style)
+        self.touch_buttons["up"] = {
+            "pos": (center_x, center_y - self.touch_button_radius * 2),
+            "radius": self.touch_button_radius,
+            "color": (150, 150, 150),
+            "label": "↑",
+            "key": pygame.K_w
+        }
+        self.touch_buttons["down"] = {
+            "pos": (center_x, center_y + self.touch_button_radius * 2),
+            "radius": self.touch_button_radius,
+            "color": (150, 150, 150),
+            "label": "↓",
+            "key": pygame.K_s
+        }
+        self.touch_buttons["left"] = {
+            "pos": (center_x - self.touch_button_radius * 2, center_y),
+            "radius": self.touch_button_radius,
+            "color": (150, 150, 150),
+            "label": "←",
+            "key": pygame.K_a
+        }
+        self.touch_buttons["right"] = {
+            "pos": (center_x + self.touch_button_radius * 2, center_y),
+            "radius": self.touch_button_radius,
+            "color": (150, 150, 150),
+            "label": "→",
+            "key": pygame.K_d
+        }
+        
+        # Action buttons (bottom right)
+        # Enter/exit vehicle
+        self.touch_buttons["action"] = {
+            "pos": (self.width - self.touch_button_margin - self.touch_button_radius * 3, 
+                   self.height - self.touch_button_margin - self.touch_button_radius * 2),
+            "radius": self.touch_button_radius,
+            "color": (0, 180, 0),
+            "label": "E",
+            "key": pygame.K_e
+        }
+        
+        # Shoot
+        self.touch_buttons["shoot"] = {
+            "pos": (self.width - self.touch_button_margin - self.touch_button_radius, 
+                   self.height - self.touch_button_margin - self.touch_button_radius * 4),
+            "radius": self.touch_button_radius,
+            "color": (180, 0, 0),
+            "label": "🔫",
+            "key": pygame.K_SPACE
+        }
+        
+        # Initialize active state for all buttons
+        for button in self.touch_buttons:
+            self.touch_active[button] = False
+
+    def draw_touch_controls(self):
+        """Draw on-screen touch controls"""
+        if not self.touch_enabled:
+            return
+            
+        # Create a surface for the semi-transparent controls
+        control_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        
+        # Draw each button
+        for name, button in self.touch_buttons.items():
+            # Draw the button circle
+            color = list(button["color"])
+            
+            # Make active buttons brighter
+            if self.touch_active[name]:
+                # Brighten the color
+                color = [min(c + 70, 255) for c in color]
+            
+            # Set alpha transparency
+            color.append(self.touch_button_alpha)
+            
+            # Draw the button
+            pygame.draw.circle(control_surface, color, button["pos"], button["radius"])
+            
+            # Add button label
+            font = pygame.font.SysFont(None, 36)
+            label = font.render(button["label"], True, (255, 255, 255))
+            label_rect = label.get_rect(center=button["pos"])
+            control_surface.blit(label, label_rect)
+        
+        # Blit the control surface onto the screen
+        self.screen.blit(control_surface, (0, 0))
 
     def update_camera(self):
         # Calculate target camera position (centered on player)
@@ -1628,32 +1880,52 @@ class Game:
             # Get keyboard state
             keys = pygame.key.get_pressed()
 
-            # Handle player movement
-            if not self.player.in_vehicle:
-                dx = 0
-                dy = 0
-                if keys[pygame.K_w]: dy -= 1
-                if keys[pygame.K_s]: dy += 1
-                if keys[pygame.K_a]: dx -= 1
-                if keys[pygame.K_d]: dx += 1
-                self.player.move(dx, dy, self.map.walls)
-            else:
-                # Vehicle controls
-                forward = 0
-                turn = 0
-                if keys[pygame.K_w]: forward = 1
-                if keys[pygame.K_s]: forward = -1
-                if keys[pygame.K_a]: turn = -1
-                if keys[pygame.K_d]: turn = 1
-                self.player.in_vehicle.move(forward, turn, self.map.walls)
-                # Update player position to vehicle position
-                self.player.x = self.player.in_vehicle.x
-                self.player.y = self.player.in_vehicle.y
+            # Only update game state if not paused
+            if not self.paused:
+                # Handle player movement
+                if not self.player.in_vehicle:
+                    dx = 0
+                    dy = 0
+                    # Keyboard input
+                    if keys[pygame.K_w]: dy -= 1
+                    if keys[pygame.K_s]: dy += 1
+                    if keys[pygame.K_a]: dx -= 1
+                    if keys[pygame.K_d]: dx += 1
+                    
+                    # Touch input
+                    if self.touch_enabled:
+                        if self.touch_active["up"]: dy -= 1
+                        if self.touch_active["down"]: dy += 1
+                        if self.touch_active["left"]: dx -= 1
+                        if self.touch_active["right"]: dx += 1
+                    
+                    self.player.move(dx, dy, self.map.walls)
+                else:
+                    # Vehicle controls
+                    forward = 0
+                    turn = 0
+                    # Keyboard input
+                    if keys[pygame.K_w]: forward = 1
+                    if keys[pygame.K_s]: forward = -1
+                    if keys[pygame.K_a]: turn = -1
+                    if keys[pygame.K_d]: turn = 1
+                    
+                    # Touch input
+                    if self.touch_enabled:
+                        if self.touch_active["up"]: forward = 1
+                        if self.touch_active["down"]: forward = -1
+                        if self.touch_active["left"]: turn = -1
+                        if self.touch_active["right"]: turn = 1
+                    
+                    self.player.in_vehicle.move(forward, turn, self.map.walls)
+                    # Update player position to vehicle position
+                    self.player.x = self.player.in_vehicle.x
+                    self.player.y = self.player.in_vehicle.y
 
-            # Update game objects
-            self.player.update()
-            self.map.update(self.player)
-            self.update_camera()
+                # Update game objects
+                self.player.update()
+                self.map.update(self.player)
+                self.update_camera()
 
             # Draw everything
             self.screen.fill(self.map.get_sky_color())  # Clear screen with sky color
@@ -1675,19 +1947,57 @@ class Game:
             # Draw UI elements
             self.player.draw_wanted_level(self.screen)
             self.map.draw_minimap(self.screen, self.player.x, self.player.y)
-            self.draw_controls_help()
+            
+            # Only show controls help when not paused
+            if not self.paused:
+                self.draw_controls_help()
+            
             self.draw_debug_info()
+            
+            # Draw touch controls if not paused
+            if self.touch_enabled and not self.paused:
+                self.draw_touch_controls()
+                
+            # Always draw pause button
+            if self.touch_enabled:
+                self.draw_pause_button()
+                
+            # Draw pause menu if paused
+            if self.paused:
+                self.draw_pause_menu()
 
             # Update display
             pygame.display.flip()
             self.clock.tick(60)
 
+def detect_mobile():
+    """Try to detect if we're running on a mobile device"""
+    try:
+        # On Replit, this can help determine if we're on a mobile browser
+        user_agent = os.environ.get('HTTP_USER_AGENT', '').lower()
+        return any(term in user_agent for term in ['android', 'iphone', 'ipad', 'mobile'])
+    except:
+        # Fallback - assume desktop
+        return False
+
 def main():
     # Set up software renderer before initializing pygame
     os.environ['SDL_VIDEODRIVER'] = 'x11'
     os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
-
+    
+    # Force mobile controls on for testing (remove this line later)
+    is_mobile = True
+    
     game = Game()
+    
+    # Set touch mode based on device
+    game.touch_enabled = is_mobile
+    
+    # If we're on mobile, adjust display settings
+    if is_mobile:
+        print("Mobile device detected, enabling touch controls")
+        # Could adjust other settings here like UI scaling
+    
     game.run()
 
 if __name__ == "__main__":
