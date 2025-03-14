@@ -660,6 +660,10 @@ class Player:
         self.wanted_cooldown = 0
 
     def move(self, dx, dy, walls):
+        # Debug output to understand the movement inputs
+        if dx != 0 or dy != 0:
+            print(f"Player move called with dx={dx}, dy={dy}")
+
         # Update direction based on movement
         if dx != 0 or dy != 0:  # Only update direction if there's movement
             if abs(dx) > abs(dy):
@@ -687,6 +691,7 @@ class Player:
         can_move = True
         for wall in walls:
             if new_rect.colliderect(wall["rect"]):
+                print(f"Wall collision detected at {wall['rect']}")
                 can_move = False
                 break
 
@@ -694,6 +699,11 @@ class Player:
             self.x = new_x
             self.y = new_y
             self.rect = new_rect
+            if dx != 0 or dy != 0:
+                print(f"Player moved to ({self.x}, {self.y})")
+        else:
+            if dx != 0 or dy != 0:
+                print(f"Movement blocked, player stayed at ({self.x}, {self.y})")
 
     def draw(self, screen, camera_x, camera_y):
         try:
@@ -2020,18 +2030,38 @@ class Game:
                 if not self.player.in_vehicle:
                     dx = 0
                     dy = 0
-                    # Keyboard input
-                    if keys[pygame.K_w]: dy -= 1
-                    if keys[pygame.K_s]: dy += 1
-                    if keys[pygame.K_a]: dx -= 1
-                    if keys[pygame.K_d]: dx += 1
+                    # Keyboard input with debug output
+                    if keys[pygame.K_w]: 
+                        dy -= 1
+                        print("W key pressed")
+                    if keys[pygame.K_s]: 
+                        dy += 1
+                        print("S key pressed")
+                    if keys[pygame.K_a]: 
+                        dx -= 1
+                        print("A key pressed")
+                    if keys[pygame.K_d]: 
+                        dx += 1
+                        print("D key pressed")
                     
                     # Touch input
                     if self.touch_enabled:
-                        if self.touch_active["up"]: dy -= 1
-                        if self.touch_active["down"]: dy += 1
-                        if self.touch_active["left"]: dx -= 1
-                        if self.touch_active["right"]: dx += 1
+                        if self.touch_active["up"]: 
+                            dy -= 1
+                            print("Touch UP active")
+                        if self.touch_active["down"]: 
+                            dy += 1
+                            print("Touch DOWN active")
+                        if self.touch_active["left"]: 
+                            dx -= 1
+                            print("Touch LEFT active")
+                        if self.touch_active["right"]: 
+                            dx += 1
+                            print("Touch RIGHT active")
+                    
+                    # Debug info about input values
+                    if dx != 0 or dy != 0:
+                        print(f"Movement input values: dx={dx}, dy={dy}")
                     
                     self.player.move(dx, dy, self.map.walls)
                 else:
