@@ -323,6 +323,46 @@ class Map:
                         building_rect.bottom >= 0 and building_rect.top <= screen.get_height()):
                         pygame.draw.rect(grid_surface, building["color"], building_rect)
             
+            # Draw traffic lights at intersections
+            if hasattr(self, 'traffic_lights'):
+                for light in self.traffic_lights:
+                    # Calculate screen position
+                    light_x, light_y = light['position']
+                    screen_x = light_x - camera_x
+                    screen_y = light_y - camera_y
+                    
+                    # Skip if not on screen
+                    if (screen_x < -20 or screen_x > screen.get_width() + 20 or
+                        screen_y < -20 or screen_y > screen.get_height() + 20):
+                        continue
+                    
+                    # Draw traffic light pole
+                    pygame.draw.rect(grid_surface, (50, 50, 50), 
+                                  (screen_x - 3, screen_y - 3, 6, 6))
+                    
+                    # Draw signal housings
+                    light_box_size = 10
+                    
+                    # Horizontal traffic light (controlling east-west traffic)
+                    h_light_color = (0, 200, 0) if light['horizontal_green'] else (200, 0, 0)
+                    pygame.draw.rect(grid_surface, (80, 80, 80), 
+                                  (screen_x - light_box_size - 5, screen_y - light_box_size//2, 
+                                   light_box_size, light_box_size))
+                    pygame.draw.circle(grid_surface, h_light_color,
+                                    (int(screen_x - light_box_size - 5 + light_box_size//2), 
+                                     int(screen_y)), 
+                                    light_box_size//2 - 1)
+                    
+                    # Vertical traffic light (controlling north-south traffic)
+                    v_light_color = (200, 0, 0) if light['horizontal_green'] else (0, 200, 0)
+                    pygame.draw.rect(grid_surface, (80, 80, 80), 
+                                  (screen_x - light_box_size//2, screen_y - light_box_size - 5, 
+                                   light_box_size, light_box_size))
+                    pygame.draw.circle(grid_surface, v_light_color,
+                                    (int(screen_x), 
+                                     int(screen_y - light_box_size - 5 + light_box_size//2)), 
+                                    light_box_size//2 - 1)
+            
             # Blit grid to screen
             screen.blit(grid_surface, (0, 0))
             
