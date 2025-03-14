@@ -99,8 +99,8 @@ class Map:
         self.spawn_pedestrians(30)
 
         # Time of day system
-        self.time_of_day = 0.3
-        self.time_speed = 0.0001
+        self.time_of_day = 0.3  # Starting at mid-morning
+        self.time_speed = 0.00005  # Slower time progression for more realistic day/night cycles
         self.sky_colors = {
             0.0: (10, 10, 40),     # Midnight
             0.25: (200, 120, 40),  # Sunrise
@@ -686,8 +686,9 @@ class Vehicle:
         self.x = x
         self.y = y
         self.speed = 0
-        self.max_speed = 6
-        self.acceleration = 0.2
+        self.max_speed = 3.5  # Reduced max speed for more authentic GTA1/2 pace
+        self.acceleration = 0.1  # Reduced for better acceleration curve
+        self.deceleration = 0.15  # Added deceleration for natural slowing
         self.rotation = 0
         # GTA1/2 style: vehicles take up exactly one lane width (40 pixels)
         self.size = (40, 20)  # Increased to match GTA style (wider, proportionally longer)
@@ -710,8 +711,8 @@ class Vehicle:
             self.speed = min(max(self.speed + (self.acceleration * forward), -self.max_speed), self.max_speed)
         else:
             # Apply gradual deceleration when no forward/backward input
-            if abs(self.speed) > self.acceleration:
-                self.speed -= (self.acceleration * (1 if self.speed > 0 else -1))
+            if abs(self.speed) > self.deceleration:
+                self.speed -= (self.deceleration * (1 if self.speed > 0 else -1))
             else:
                 self.speed = 0
 
@@ -800,7 +801,8 @@ class PoliceVehicle(Vehicle):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.color = (0, 0, 150)  # Police blue
-        self.max_speed = 7  # Slightly faster than regular vehicles
+        self.max_speed = 4  # Faster than regular vehicles but more realistic for GTA1/2
+        self.acceleration = 0.12  # Slightly better acceleration than civilian cars
         self.target = None
         self.state = "patrol"  # patrol, chase
         self.patrol_timer = random.randint(50, 150)
@@ -929,8 +931,8 @@ class Player:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.speed = 4  # Increased speed for better gameplay
-        self.size = 24  # Increased size to match GTA1/2 style (50% larger)
+        self.speed = 2.2  # Reduced for more realistic movement
+        self.size = 16  # Reduced to match pedestrian size for proper GTA1/2 scaling
         self.rect = pygame.Rect(x - self.size/2, y - self.size/2, self.size, self.size)
         self.direction = 'down'
         self.moving = False
@@ -1344,8 +1346,8 @@ class Pedestrian:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.speed = random.uniform(0.5, 1.5)
-        self.size = 16
+        self.speed = random.uniform(0.5, 1.1)  # Reduced speed range for more authentic movement
+        self.size = 16  # Matches the player's size for consistent scaling
         self.rect = pygame.Rect(x - self.size/2, y - self.size/2, self.size, self.size)
         self.direction = random.choice(['up', 'down', 'left', 'right'])
         self.moving = True
