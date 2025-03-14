@@ -441,7 +441,57 @@ class Map:
         # Update time of day
         self.time_of_day = (self.time_of_day + self.time_speed) % 1.0
 
-        # Update police AI
+        # Update traffic lights every 3 seconds (180 frames at 60fps)
+        if hasattr(self, 'traffic_lights') and hasattr(self, 'traffic_light_timer'):
+            self.traffic_light_timer += 1
+            if self.traffic_light_timer >= 180:  # 3 seconds at 60 fps
+                self.traffic_light_timer = 0
+                # Update all traffic lights
+                for light in self.traffic_lights:
+                    light['timer'] += 1
+                    if light['timer'] >= 180:  # Individual light changes every 3 seconds
+                        light['timer'] = 0
+                        light['horizontal_green'] = not light['horizontal_green']
+        
+        # Update regular vehicles with traffic light awareness
+        for vehicle in self.vehicles:
+            # Check if vehicle is near any traffic light
+            at_traffic_light = False
+            should_stop = False
+            
+            if hasattr(self, 'traffic_lights'):
+                for light in self.traffic_lights:
+                    # Calculate distance to traffic light
+                    light_x, light_y = light['position']
+                    distance = math.sqrt((vehicle.x - light_x)**2 + (vehicle.y - light_y)**2)
+                    
+                    # If vehicle is close to traffic light (within 60 pixels)
+                    if distance < 60:
+                        at_traffic_light = True
+                        # Determine if vehicle is moving horizontally or vertically
+                        is_horizontal = vehicle.rotation in [0, 180]  # Horizontal if facing left/right
+                        
+                        # Check if vehicle should stop based on light color and direction
+                        if is_horizontal and not light['horizontal_green']:
+                            should_stop = True  # Horizontal traffic has red light
+                        elif not is_horizontal and light['horizontal_green']:
+                            should_stop = True  # Vertical traffic has red light
+                        
+                        break  # Only consider the closest traffic light
+            
+            # Simple AI behavior with traffic light awareness
+            if should_stop:
+                # Stop at red light
+                vehicle.move(0, 0, self.walls)  # No forward movement, no turning
+            else:
+                # Basic AI - randomly change direction occasionally
+                if random.random() < 0.01:  # 1% chance to change direction each frame
+                    vehicle.rotation = random.choice([0, 90, 180, 270])  # Choose a cardinal direction
+                
+                # Move forward at normal speed
+                vehicle.move(0.5, 0, self.walls)  # Move forward at half speed, no turning
+        
+        # Update police AI (override traffic lights when in chase mode)
         for police in self.police_vehicles:
             police.update_ai(player, self.walls, self.roads)
 
@@ -482,6 +532,14 @@ class Map:
         if not hasattr(self, 'roads'):
             self.roads = []
             
+        # Initialize traffic lights if not already done
+        if not hasattr(self, 'traffic_lights'):
+            self.traffic_lights = []
+        
+        # Time for traffic lights
+        if not hasattr(self, 'traffic_light_timer'):
+            self.traffic_light_timer = 0
+            
         # GTA-style city parameters
         block_size = 320  # Same as in procedural map generator
         road_width = 120  # Width of roads
@@ -509,8 +567,19 @@ class Map:
                 "rect": pygame.Rect(x - road_width // 2, 0, road_width, self.height),
                 "horizontal": False
             })
+        
+        # Create traffic lights at intersections
+        for x in range(road_width // 2, self.width, block_size):
+            for y in range(road_width // 2, self.height, block_size):
+                # Create a traffic light at each intersection
+                self.traffic_lights.append({
+                    "position": (x, y),
+                    "horizontal_green": True,  # Start with horizontal roads having green light
+                    "timer": random.randint(0, 180)  # Randomize initial timers to prevent all lights changing at once
+                })
             
         print(f"Generated {len(self.roads)} road segments for AI navigation")
+        print(f"Added {len(self.traffic_lights)} traffic lights at intersections")
             
     def get_sky_color(self):
         # Find the two closest time points
@@ -580,7 +649,8 @@ class Vehicle:
         self.max_speed = 6
         self.acceleration = 0.2
         self.rotation = 0
-        self.size = (32, 16)
+        # GTA1/2 style: vehicles take up exactly one lane width (40 pixels)
+        self.size = (40, 20)  # Increased to match GTA style (wider, proportionally longer)
         self.rect = pygame.Rect(x - self.size[0]/2, y - self.size[1]/2, self.size[0], self.size[1])
         # More varied and realistic car colors
         self.color = random.choice([
@@ -819,8 +889,8 @@ class Player:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.speed = 3
-        self.size = 16
+        self.speed = 4  # Increased speed for better gameplay
+        self.size = 24  # Increased size to match GTA1/2 style (50% larger)
         self.rect = pygame.Rect(x - self.size/2, y - self.size/2, self.size, self.size)
         self.direction = 'down'
         self.moving = False
@@ -2276,16 +2346,16 @@ class Game:
         self.screen.blit(control_surface, (0, 0))
 
     def update_camera(self):
-        # Use a tighter zoom level for GTA-like view (zoom in closer to the player)
-        # This creates a more zoomed-in view like in classic GTA games
-        zoom_factor = 0.65  # Smaller number means closer zoom
+        # Use a much tighter zoom level for authentic GTA1/2 view
+        # This creates a very zoomed-in view focused primarily on the player and immediate surroundings
+        zoom_factor = 0.4  # Much smaller number for much closer zoom (GTA1/2 style)
         
         # Calculate target camera position (centered on player with zoom)
         target_camera_x = self.player.x - (self.width * zoom_factor)
         target_camera_y = self.player.y - (self.height * zoom_factor)
 
         # Smooth camera movement with faster response time
-        camera_speed = 0.15  # Higher value = faster camera tracking
+        camera_speed = 0.2  # Higher value = faster camera tracking
         self.camera_x += (target_camera_x - self.camera_x) * camera_speed
         self.camera_y += (target_camera_y - self.camera_y) * camera_speed
 
