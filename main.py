@@ -78,6 +78,10 @@ class Map:
             # Create roads based on image analysis
             surface_array = pygame.surfarray.array3d(self.map_image)
             road_threshold = 100  # Adjust based on your image
+            
+            # Initialize buildings list if it doesn't exist
+            if not hasattr(self, 'buildings'):
+                self.buildings = []
 
             # Sample points in the image to detect roads
             step = 32  # Sample every 32 pixels
@@ -94,18 +98,45 @@ class Map:
                         road = pygame.Rect(x, y, step, step)
                         self.roads.append({"rect": road, "horizontal": is_horizontal})
 
-                        # Add walls along road edges
+                        # Add walls along road edges (curbs) - these should be visible but not block movement
                         wall_width = 8
+                        
+                        # Instead of adding curbs as walls (which block movement),
+                        # we'll create a separate list for visual curbs if it doesn't exist
+                        if not hasattr(self, 'curbs'):
+                            self.curbs = []
+                            
                         if is_horizontal:
-                            # Add walls above and below road
-                            self.walls.append({"rect": pygame.Rect(x, y - wall_width, step, wall_width)})
-                            self.walls.append({"rect": pygame.Rect(x, y + step, step, wall_width)})
+                            # Add curbs above and below road (visual only)
+                            self.curbs.append({"rect": pygame.Rect(x, y - wall_width, step, wall_width)})
+                            self.curbs.append({"rect": pygame.Rect(x, y + step, step, wall_width)})
                         else:
-                            # Add walls to left and right of road
-                            self.walls.append({"rect": pygame.Rect(x - wall_width, y, wall_width, step)})
-                            self.walls.append({"rect": pygame.Rect(x + step, y, wall_width, step)})
+                            # Add curbs to left and right of road (visual only)
+                            self.curbs.append({"rect": pygame.Rect(x - wall_width, y, wall_width, step)})
+                            self.curbs.append({"rect": pygame.Rect(x + step, y, wall_width, step)})
+                    else:
+                        # Light area - likely a building or empty space
+                        # Add some buildings in non-road areas with probability
+                        if random.random() < 0.2:  # 20% chance for a building
+                            building_size = random.randint(step//2, step)
+                            building_rect = pygame.Rect(
+                                x + random.randint(0, step-building_size), 
+                                y + random.randint(0, step-building_size),
+                                building_size, building_size
+                            )
+                            # Add building as a wall for collision
+                            self.walls.append({"rect": building_rect})
+                            
+                            # Also keep it in buildings list for drawing
+                            self.buildings.append({
+                                "rect": building_rect, 
+                                "height": random.randint(1, 3),
+                                "color": random.choice([(200, 200, 200), (180, 180, 180), (160, 160, 160)])
+                            })
         except Exception as e:
             print(f"Error creating city layout: {e}")
+            import traceback
+            traceback.print_exc()
             # Create fallback layout
             self.create_fallback_layout()
 
@@ -113,13 +144,64 @@ class Map:
         # Create a basic grid layout if image analysis fails
         road_width = 96
         block_size = 300
+        
+        # Initialize buildings list if needed
+        if not hasattr(self, 'buildings'):
+            self.buildings = []
+            
+        # Initialize curbs list if needed
+        if not hasattr(self, 'curbs'):
+            self.curbs = []
 
+        # Define wall width
+        wall_width = 8
+        
         # Create horizontal and vertical roads
         for y in range(0, self.height, block_size):
+            # Add road itself (not a wall)
             self.roads.append({"rect": pygame.Rect(0, y, self.width, road_width), "horizontal": True})
+            
+            # Add visual curbs above and below roads (but don't make them blocking walls)
+            if y > 0:  # Don't add curb at top of map
+                self.curbs.append({"rect": pygame.Rect(0, y - wall_width, self.width, wall_width)})
+            self.curbs.append({"rect": pygame.Rect(0, y + road_width, self.width, wall_width)})
 
         for x in range(0, self.width, block_size):
+            # Add road itself (not a wall)
             self.roads.append({"rect": pygame.Rect(x, 0, road_width, self.height), "horizontal": False})
+            
+            # Add visual curbs to left and right of roads (but don't make them blocking walls)
+            if x > 0:  # Don't add curb at left edge of map
+                self.curbs.append({"rect": pygame.Rect(x - wall_width, 0, wall_width, self.height)})
+            self.curbs.append({"rect": pygame.Rect(x + road_width, 0, wall_width, self.height)})
+        
+        # Add buildings in non-road areas
+        for x in range(road_width + 20, self.width, block_size):
+            for y in range(road_width + 20, self.height, block_size):
+                # Skip if too close to a road
+                too_close = False
+                for road in self.roads:
+                    road_rect = road["rect"]
+                    if (abs(x - road_rect.centerx) < road_width * 1.5 or
+                        abs(y - road_rect.centery) < road_width * 1.5):
+                        too_close = True
+                        break
+                
+                if not too_close and random.random() < 0.7:  # 70% chance of building
+                    building_size = random.randint(50, 150)
+                    building_rect = pygame.Rect(
+                        x, y, building_size, building_size
+                    )
+                    
+                    # Add building as a wall for collision
+                    self.walls.append({"rect": building_rect})
+                    
+                    # Also keep it in buildings list for drawing
+                    self.buildings.append({
+                        "rect": building_rect, 
+                        "height": random.randint(1, 3),
+                        "color": random.choice([(200, 200, 200), (180, 180, 180), (160, 160, 160)])
+                    })
 
     def draw(self, screen, camera_x, camera_y):
         try:
@@ -149,7 +231,7 @@ class Map:
                     print(f"Drawing map at position: {map_pos}")
                     print(f"Camera position: ({camera_x}, {camera_y})")
                     print(f"Map dimensions: {self.map_image.get_size()}")
-
+            
             # Draw a debug grid to help with positioning
             grid_size = 100
             grid_color = (200, 200, 200, 30)  # Very light gray, semi-transparent
@@ -178,6 +260,32 @@ class Map:
             center_y = self.height/2 - camera_y
             if 0 <= center_x < screen.get_width() and 0 <= center_y < screen.get_height():
                 pygame.draw.circle(grid_surface, (255, 0, 0, 100), (int(center_x), int(center_y)), 10)
+            
+            # Draw visual curbs (if they exist)
+            if hasattr(self, 'curbs'):
+                for curb in self.curbs:
+                    curb_rect = pygame.Rect(
+                        curb["rect"].x - camera_x,
+                        curb["rect"].y - camera_y,
+                        curb["rect"].width,
+                        curb["rect"].height
+                    )
+                    if (curb_rect.right >= 0 and curb_rect.left <= screen.get_width() and
+                        curb_rect.bottom >= 0 and curb_rect.top <= screen.get_height()):
+                        pygame.draw.rect(grid_surface, (120, 120, 100, 150), curb_rect)
+            
+            # Draw buildings for better visibility
+            if hasattr(self, 'buildings'):
+                for building in self.buildings:
+                    building_rect = pygame.Rect(
+                        building["rect"].x - camera_x,
+                        building["rect"].y - camera_y,
+                        building["rect"].width,
+                        building["rect"].height
+                    )
+                    if (building_rect.right >= 0 and building_rect.left <= screen.get_width() and
+                        building_rect.bottom >= 0 and building_rect.top <= screen.get_height()):
+                        pygame.draw.rect(grid_surface, building["color"], building_rect)
             
             # Blit grid to screen
             screen.blit(grid_surface, (0, 0))
@@ -663,6 +771,8 @@ class Player:
         # Debug output to understand the movement inputs
         if dx != 0 or dy != 0:
             print(f"Player move called with dx={dx}, dy={dy}")
+            print(f"Current position: ({self.x}, {self.y})")
+            print(f"Number of wall objects: {len(walls)}")
 
         # Update direction based on movement
         if dx != 0 or dy != 0:  # Only update direction if there's movement
@@ -684,26 +794,84 @@ class Player:
         else:
             self.animation_frame = 0
 
-        # Update rectangle for collision detection
+        # Check collision with walls - but try horizontal and vertical movements separately to allow sliding
+        can_move_x = True
+        can_move_y = True
+        
+        # Create collision detection rectangles
+        player_rect = pygame.Rect(self.x - self.size/2, self.y - self.size/2, self.size, self.size)
         new_rect = pygame.Rect(new_x - self.size/2, new_y - self.size/2, self.size, self.size)
-
-        # Check collision with walls
-        can_move = True
-        for wall in walls:
-            if new_rect.colliderect(wall["rect"]):
-                print(f"Wall collision detected at {wall['rect']}")
-                can_move = False
-                break
-
-        if can_move:
+        x_rect = pygame.Rect(new_x - self.size/2, self.y - self.size/2, self.size, self.size)
+        y_rect = pygame.Rect(self.x - self.size/2, new_y - self.size/2, self.size, self.size)
+        
+        # Debug current rectangles
+        print(f"Current player_rect: {player_rect}")
+        print(f"Proposed new_rect: {new_rect}")
+        
+        # First check X-axis movement only
+        if dx != 0:
+            # Print X movement rectangle for debugging
+            print(f"X movement rect: {x_rect}")
+            
+            x_collision = False
+            # Check wall collisions
+            for i, wall in enumerate(walls):
+                wall_rect = wall["rect"]
+                if x_rect.colliderect(wall_rect):
+                    print(f"Wall {i} collision on X-axis at {wall_rect}")
+                    x_collision = True
+                    can_move_x = False
+                    break
+            
+            if not x_collision:
+                print("No X-axis collisions detected")
+                # Ensure we're on a valid road for movement
+                # We'll use map directly from walls instead, since walls comes from the map
+                # Skip road validation for now to focus on collision detection
+                pass
+        
+        # Then check Y-axis movement only
+        if dy != 0:
+            # Print Y movement rectangle for debugging
+            print(f"Y movement rect: {y_rect}")
+            
+            y_collision = False
+            # Check wall collisions
+            for i, wall in enumerate(walls):
+                wall_rect = wall["rect"]
+                if y_rect.colliderect(wall_rect):
+                    print(f"Wall {i} collision on Y-axis at {wall_rect}")
+                    y_collision = True
+                    can_move_y = False
+                    break
+            
+            if not y_collision:
+                print("No Y-axis collisions detected")
+                # We'll use map directly from walls instead, since walls comes from the map
+                # Skip road validation for now to focus on collision detection
+                pass
+        
+        # Apply movement based on what's allowed
+        if can_move_x:
             self.x = new_x
-            self.y = new_y
-            self.rect = new_rect
-            if dx != 0 or dy != 0:
-                print(f"Player moved to ({self.x}, {self.y})")
+            print(f"Player moved horizontally to x={self.x}")
         else:
-            if dx != 0 or dy != 0:
-                print(f"Movement blocked, player stayed at ({self.x}, {self.y})")
+            print(f"Horizontal movement blocked, staying at x={self.x}")
+        
+        if can_move_y:
+            self.y = new_y
+            print(f"Player moved vertically to y={self.y}")
+        else:
+            print(f"Vertical movement blocked, staying at y={self.y}")
+            
+        # Update player rectangle after movement
+        self.rect = pygame.Rect(self.x - self.size/2, self.y - self.size/2, self.size, self.size)
+        
+        if dx != 0 or dy != 0:
+            if can_move_x or can_move_y:
+                print(f"Player moved to final position ({self.x}, {self.y})")
+            else:
+                print(f"Movement completely blocked, player stayed at ({self.x}, {self.y})")
 
     def draw(self, screen, camera_x, camera_y):
         try:
@@ -1652,9 +1820,11 @@ class Pedestrian:
 
 class Game:
     def __init__(self):
-        # Set SDL variables for Replit environment
-        os.environ['SDL_VIDEODRIVER'] = 'x11'
-        os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'  # Force software rendering
+        # Only set SDL variables for Replit environment
+        if os.environ.get('REPL_ID'):
+            os.environ['SDL_VIDEODRIVER'] = 'x11'
+            os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'  # Force software rendering
+            print("Running in Replit environment, using x11 driver")
 
         # Don't re-initialize pygame if already done
         if not pygame.get_init():
@@ -1667,13 +1837,29 @@ class Game:
         self.height = 600
         
         try:
-            self.screen = pygame.display.set_mode((self.width, self.height))
+            # Use resizable window for desktop mode
+            is_desktop = not os.environ.get('REPL_ID') and not detect_mobile()
+            
+            if is_desktop:
+                self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+                pygame.display.set_caption("GTA-Style Game - Desktop Mode (Resizable)")
+                print("Desktop mode detected, using resizable window")
+            else:
+                self.screen = pygame.display.set_mode((self.width, self.height))
+                pygame.display.set_caption("GTA-Style Game")
+            
             print(f"Display mode set: {self.width}x{self.height}")
         except Exception as e:
             print(f"Error setting display mode: {e}")
             raise
             
-        pygame.display.set_caption("Cartel City")
+        # Print control instructions
+        print("=== GAME CONTROLS ===")
+        print("WASD: Move character")
+        print("E: Enter/exit vehicle")
+        print("SPACE: Shoot (if you have a weapon)")
+        print("P or ESC: Pause game")
+        print("====================")
 
         # Create game objects
         self.map = Map()
@@ -1686,6 +1872,7 @@ class Game:
                 break
 
         self.player = Player(spawn_x, spawn_y)
+        self.player.game = self  # Add reference to game object
 
         # Initialize camera centered on player
         self.camera_x = self.player.x - self.width/2
@@ -1702,6 +1889,7 @@ class Game:
         self.running = True
         self.paused = False
         self.clock = pygame.time.Clock()
+        self.frame_count = 0  # Add frame counter for timing events
 
         # Debug info
         self.show_debug = False
@@ -1775,6 +1963,18 @@ class Game:
                 elif event.key == pygame.K_ESCAPE:
                     # Toggle pause state with ESC key
                     self.paused = not self.paused
+                # Add a quick exit key for PC testing
+                elif event.key == pygame.K_q and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                    print("Ctrl+Q pressed - exiting game")
+                    self.running = False
+            # Handle window resize events for PC mode
+            elif event.type == pygame.VIDEORESIZE:
+                # Only handle resize events when not on Replit
+                if not os.environ.get('REPL_ID'):
+                    print(f"Window resized to {event.w}x{event.h}")
+                    self.width = event.w
+                    self.height = event.h
+                    self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
             
             # Touch support for mobile
             elif event.type == pygame.MOUSEBUTTONDOWN and self.touch_enabled:
@@ -2030,34 +2230,69 @@ class Game:
                 if not self.player.in_vehicle:
                     dx = 0
                     dy = 0
-                    # Keyboard input with debug output
+                    # Add a much clearer key press debug
+                    print(f"DEBUG: Key states - W:{keys[pygame.K_w]} A:{keys[pygame.K_a]} S:{keys[pygame.K_s]} D:{keys[pygame.K_d]}")
+                    
+                    # Keyboard input with debug output - enhanced speed
                     if keys[pygame.K_w]: 
-                        dy -= 1
-                        print("W key pressed")
+                        dy -= 3  # Faster movement
+                        print("W key pressed - Moving UP FAST")
                     if keys[pygame.K_s]: 
-                        dy += 1
-                        print("S key pressed")
+                        dy += 3  # Faster movement
+                        print("S key pressed - Moving DOWN FAST")
                     if keys[pygame.K_a]: 
-                        dx -= 1
-                        print("A key pressed")
+                        dx -= 3  # Faster movement
+                        print("A key pressed - Moving LEFT FAST")
                     if keys[pygame.K_d]: 
-                        dx += 1
-                        print("D key pressed")
+                        dx += 3  # Faster movement
+                        print("D key pressed - Moving RIGHT FAST")
                     
                     # Touch input
                     if self.touch_enabled:
-                        if self.touch_active["up"]: 
-                            dy -= 1
-                            print("Touch UP active")
-                        if self.touch_active["down"]: 
-                            dy += 1
-                            print("Touch DOWN active")
-                        if self.touch_active["left"]: 
-                            dx -= 1
-                            print("Touch LEFT active")
-                        if self.touch_active["right"]: 
-                            dx += 1
-                            print("Touch RIGHT active")
+                        # Make sure touch_active dictionary is initialized
+                        if not hasattr(self, 'touch_active') or self.touch_active is None:
+                            self.touch_active = {}
+                            
+                        # Debug touch button states
+                        print(f"Touch states: UP:{self.touch_active.get('up', False)} DOWN:{self.touch_active.get('down', False)} LEFT:{self.touch_active.get('left', False)} RIGHT:{self.touch_active.get('right', False)}")
+                        
+                        if self.touch_active.get("up", False): 
+                            dy -= 3  # Faster movement to match keyboard
+                            print("Touch UP active - Moving UP FAST")
+                        if self.touch_active.get("down", False): 
+                            dy += 3  # Faster movement to match keyboard
+                            print("Touch DOWN active - Moving DOWN FAST")
+                        if self.touch_active.get("left", False): 
+                            dx -= 3  # Faster movement to match keyboard
+                            print("Touch LEFT active - Moving LEFT FAST")
+                        if self.touch_active.get("right", False): 
+                            dx += 3  # Faster movement to match keyboard
+                            print("Touch RIGHT active - Moving RIGHT FAST")
+                        
+                        # Automatic movement testing is completely optional
+                        # For PC users, this allows testing without requiring keyboard/mouse
+                        # Comment out this section to disable automatic movement
+                        if os.environ.get('REPL_ID') and dx == 0 and dy == 0:
+                            # Only run automated movement in Replit environment for testing
+                            test_direction = (self.frame_count // 30) % 4  # Change direction every 0.5 seconds
+                            
+                            # Apply test movement if no input detected
+                            if test_direction == 0:
+                                dx = -3  # left (faster)
+                                dy = 0
+                                print("TEST: Moving LEFT FAST")
+                            elif test_direction == 1:
+                                dx = 0 
+                                dy = -3  # up (faster)
+                                print("TEST: Moving UP FAST")
+                            elif test_direction == 2:
+                                dx = 3  # right (faster)
+                                dy = 0
+                                print("TEST: Moving RIGHT FAST")
+                            else:
+                                dx = 0
+                                dy = 3  # down (faster)
+                                print("TEST: Moving DOWN FAST")
                     
                     # Debug info about input values
                     if dx != 0 or dy != 0:
@@ -2142,6 +2377,9 @@ class Game:
             except Exception as e:
                 print(f"Error updating display: {e}")
                 
+            # Increment frame counter
+            self.frame_count += 1
+            
             # Control frame rate
             self.clock.tick(60)
 
@@ -2156,12 +2394,15 @@ def detect_mobile():
         return False
 
 def main():
-    # Set up software renderer before initializing pygame
-    os.environ['SDL_VIDEODRIVER'] = 'x11'
-    os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
+    # Allow separate window for PC users
+    # Don't force specific video driver, let Python choose the best available
+    # Detect if we're on Replit and only use x11 if we are
+    if os.environ.get('REPL_ID'):
+        os.environ['SDL_VIDEODRIVER'] = 'x11'
+        os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
     
-    # Force mobile controls on for testing (remove this line later)
-    is_mobile = True
+    # Only set mobile mode if we're actually on mobile
+    is_mobile = detect_mobile()
     
     try:
         pygame.init()

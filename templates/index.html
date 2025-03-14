@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pygame Game Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #222;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #4CAF50;
+        }
+        
+        .game-frame {
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+            background-color: #111;
+        }
+        
+        .instructions {
+            background-color: #333;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .instructions h2 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 5px;
+        }
+        
+        .tip {
+            color: #FFC107;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pygame Game Viewer</h1>
+        
+        <p>Your game is running in a separate window. To view and interact with it, click the VNC button in the Replit sidebar.</p>
+        
+        <div class="instructions">
+            <h2>How to Play</h2>
+            <ul>
+                <li><strong>WASD</strong>: Move character</li>
+                <li><strong>E</strong>: Enter/exit vehicle</li>
+                <li><strong>SPACE</strong>: Shoot (if you have a weapon)</li>
+                <li><strong>ESC or P</strong>: Pause game</li>
+                <li><strong>Ctrl+Q</strong>: Exit game (PC only)</li>
+            </ul>
+            
+            <h2>Tips</h2>
+            <p class="tip">The game can be played with both keyboard controls and touch controls on mobile devices.</p>
+            <p class="tip">Press F3 to toggle debug information display.</p>
+        </div>
+        
+        <p>If the game doesn't appear, try restarting the workflow or check the console for errors.</p>
+    </div>
+</body>
+</html>
