@@ -26,7 +26,10 @@ class Map:
             for rect in building_rects:
                 self.walls.append({"rect": rect})
                 
-            print(f"Procedural map generated with {len(building_rects)} building collision areas")
+            # Generate roads for AI navigation based on grid pattern
+            self.generate_roads_from_grid_pattern()
+                
+            print(f"Procedural map generated with {len(building_rects)} building collision areas and {len(self.roads)} road segments")
             
         except Exception as proc_error:
             print(f"Error generating procedural map: {proc_error}")
