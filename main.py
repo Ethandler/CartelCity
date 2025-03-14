@@ -3,6 +3,7 @@ import math
 import sys
 import random
 import os
+import procedural_map  # Import our procedural map generator
 
 class Map:
     def __init__(self):
@@ -10,54 +11,86 @@ class Map:
         self.width = 2400  # Fixed size for consistent gameplay
         self.height = 1800
         
+        # Initialize lists for game objects
+        self.walls = []        # Collision walls (buildings, obstacles)
+        self.roads = []        # Road areas for AI navigation
+        self.buildings = []    # Visual buildings with metadata
+        self.curbs = []        # Visual curbs along roads
+        
         try:
-            # Load and scale the map image - try multiple possible paths
-            image_paths = [
-                'attached_assets/IMG_7818.jpeg',  
-                '/home/runner/workspace/attached_assets/IMG_7818.jpeg',
-                './attached_assets/IMG_7818.jpeg',
-                '/tmp/attached_assets/IMG_7818.jpeg',
-                'IMG_7818.jpeg'
-            ]
+            # First try to use our procedural map generator
+            print("Generating procedural GTA-style map...")
+            self.map_image, building_rects = procedural_map.generate_city_map(self.width, self.height)
             
-            loaded = False
-            for path in image_paths:
-                try:
-                    print(f"Trying to load image from: {path}")
-                    self.map_image = pygame.image.load(path).convert()
-                    self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
-                    print(f"Successfully loaded map image from {path}")
-                    loaded = True
-                    break
-                except Exception as path_error:
-                    print(f"Could not load from {path}: {path_error}")
-            
-            if not loaded:
-                raise Exception("Could not load image from any path")
+            # Add the buildings to our walls for collision detection
+            for rect in building_rects:
+                self.walls.append({"rect": rect})
                 
-        except Exception as e:
-            print(f"Error loading map image: {e}")
-            print("Creating fallback surface...")
-            # Create fallback surface if image fails to load
-            self.map_image = pygame.Surface((self.width, self.height))
-            self.map_image.fill((100, 100, 100))  # Gray background
-            # Draw some road grid pattern for visibility
-            road_color = (50, 50, 50)
-            for x in range(0, self.width, 200):
-                pygame.draw.line(self.map_image, road_color, (x, 0), (x, self.height), 20)
-            for y in range(0, self.height, 200):
-                pygame.draw.line(self.map_image, road_color, (0, y), (self.width, y), 20)
-            print("Fallback surface created.")
+            print(f"Procedural map generated with {len(building_rects)} building collision areas")
+            
+        except Exception as proc_error:
+            print(f"Error generating procedural map: {proc_error}")
+            print("Falling back to image loading...")
+            
+            # Try to load an existing map image as fallback
+            try:
+                # Load and scale the map image - try multiple possible paths
+                image_paths = [
+                    'attached_assets/IMG_7818.jpeg',  
+                    '/home/runner/workspace/attached_assets/IMG_7818.jpeg',
+                    './attached_assets/IMG_7818.jpeg',
+                    '/tmp/attached_assets/IMG_7818.jpeg',
+                    'IMG_7818.jpeg'
+                ]
+                
+                loaded = False
+                for path in image_paths:
+                    try:
+                        print(f"Trying to load image from: {path}")
+                        self.map_image = pygame.image.load(path).convert()
+                        self.map_image = pygame.transform.scale(self.map_image, (self.width, self.height))
+                        print(f"Successfully loaded map image from {path}")
+                        loaded = True
+                        break
+                    except Exception as path_error:
+                        print(f"Could not load from {path}: {path_error}")
+                
+                if not loaded:
+                    raise Exception("Could not load image from any path")
+                    
+            except Exception as e:
+                print(f"Error loading map image: {e}")
+                print("Creating fallback surface...")
+                # Create fallback surface if both procedural generation and image loading fail
+                self.map_image = pygame.Surface((self.width, self.height))
+                self.map_image.fill((60, 60, 60))  # Dark gray for streets
+                # Draw some road grid pattern for visibility
+                road_color = (50, 50, 50)
+                for x in range(0, self.width, 200):
+                    pygame.draw.line(self.map_image, road_color, (x, 0), (x, self.height), 20)
+                for y in range(0, self.height, 200):
+                    pygame.draw.line(self.map_image, road_color, (0, y), (self.width, y), 20)
+                print("Fallback surface created.")
 
         self.tile_size = 32
-        self.walls = []
-        self.roads = []
-        self.vehicles = []
-        self.police_vehicles = []
-        self.pedestrians = []
+        # Only initialize these lists if they don't already exist
+        # (the procedural generator already fills the walls list)
+        if not hasattr(self, 'vehicles'):
+            self.vehicles = []
+        if not hasattr(self, 'police_vehicles'):
+            self.police_vehicles = []
+        if not hasattr(self, 'pedestrians'):
+            self.pedestrians = []
 
-        # Create game objects
-        self.create_city_layout()
+        # Create game objects if needed
+        # Only use create_city_layout if we don't already have walls from procedural generator
+        if not self.walls:
+            print("No collision walls found - creating layout from analysis")
+            self.create_city_layout()
+        else:
+            print(f"Using existing {len(self.walls)} collision walls from procedural generator")
+        
+        # Spawn game entities
         self.spawn_vehicles(15)
         self.spawn_police(3)
         self.spawn_pedestrians(30)
@@ -2196,17 +2229,23 @@ class Game:
         self.screen.blit(control_surface, (0, 0))
 
     def update_camera(self):
-        # Calculate target camera position (centered on player)
-        target_camera_x = self.player.x - self.width/2
-        target_camera_y = self.player.y - self.height/2
+        # Use a tighter zoom level for GTA-like view (zoom in closer to the player)
+        # This creates a more zoomed-in view like in classic GTA games
+        zoom_factor = 0.65  # Smaller number means closer zoom
+        
+        # Calculate target camera position (centered on player with zoom)
+        target_camera_x = self.player.x - (self.width * zoom_factor)
+        target_camera_y = self.player.y - (self.height * zoom_factor)
 
-        # Smooth camera movement
-        self.camera_x += (target_camera_x - self.camera_x) * 0.1
-        self.camera_y += (target_camera_y - self.camera_y) * 0.1
+        # Smooth camera movement with faster response time
+        camera_speed = 0.15  # Higher value = faster camera tracking
+        self.camera_x += (target_camera_x - self.camera_x) * camera_speed
+        self.camera_y += (target_camera_y - self.camera_y) * camera_speed
 
-        # Keep camera within map bounds
-        self.camera_x = max(0, min(self.camera_x, self.map.width - self.width))
-        self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
+        # Keep camera within map bounds with a margin to prevent seeing beyond the map edge
+        margin = 50
+        self.camera_x = max(margin, min(self.camera_x, self.map.width - self.width - margin))
+        self.camera_y = max(margin, min(self.camera_y, self.map.height - self.height - margin))
 
     def run(self):
         print("Game.run() started")
