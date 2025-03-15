@@ -10,31 +10,31 @@ class Map:
         # Set default size first
         self.width = 2400  # Fixed size for consistent gameplay
         self.height = 1800
-        
+
         # Initialize lists for game objects
         self.walls = []        # Collision walls (buildings, obstacles)
         self.roads = []        # Road areas for AI navigation
         self.buildings = []    # Visual buildings with metadata
         self.curbs = []        # Visual curbs along roads
-        
+
         try:
             # First try to use our procedural map generator
             print("Generating procedural GTA-style map...")
             self.map_image, building_rects = procedural_map.generate_city_map(self.width, self.height)
-            
+
             # Add the buildings to our walls for collision detection
             for rect in building_rects:
                 self.walls.append({"rect": rect})
-                
+
             # Generate roads for AI navigation based on grid pattern
             self.generate_roads_from_grid_pattern()
-                
+
             print(f"Procedural map generated with {len(building_rects)} building collision areas and {len(self.roads)} road segments")
-            
+
         except Exception as proc_error:
             print(f"Error generating procedural map: {proc_error}")
             print("Falling back to image loading...")
-            
+
             # Try to load an existing map image as fallback
             try:
                 # Load and scale the map image - try multiple possible paths
@@ -45,7 +45,7 @@ class Map:
                     '/tmp/attached_assets/IMG_7818.jpeg',
                     'IMG_7818.jpeg'
                 ]
-                
+
                 loaded = False
                 for path in image_paths:
                     try:
@@ -57,10 +57,10 @@ class Map:
                         break
                     except Exception as path_error:
                         print(f"Could not load from {path}: {path_error}")
-                
+
                 if not loaded:
                     raise Exception("Could not load image from any path")
-                    
+
             except Exception as e:
                 print(f"Error loading map image: {e}")
                 print("Creating fallback surface...")
@@ -92,7 +92,7 @@ class Map:
             self.create_city_layout()
         else:
             print(f"Using existing {len(self.walls)} collision walls from procedural generator")
-        
+
         # Spawn game entities
         self.spawn_vehicles(15)
         self.spawn_police(3)
@@ -114,7 +114,7 @@ class Map:
             # Create roads based on image analysis
             surface_array = pygame.surfarray.array3d(self.map_image)
             road_threshold = 100  # Adjust based on your image
-            
+
             # Initialize buildings list if it doesn't exist
             if not hasattr(self, 'buildings'):
                 self.buildings = []
@@ -136,12 +136,12 @@ class Map:
 
                         # Add walls along road edges (curbs) - these should be visible but not block movement
                         wall_width = 8
-                        
+
                         # Instead of adding curbs as walls (which block movement),
                         # we'll create a separate list for visual curbs if it doesn't exist
                         if not hasattr(self, 'curbs'):
                             self.curbs = []
-                            
+
                         if is_horizontal:
                             # Add curbs above and below road (visual only)
                             self.curbs.append({"rect": pygame.Rect(x, y - wall_width, step, wall_width)})
@@ -162,7 +162,7 @@ class Map:
                             )
                             # Add building as a wall for collision
                             self.walls.append({"rect": building_rect})
-                            
+
                             # Also keep it in buildings list for drawing
                             self.buildings.append({
                                 "rect": building_rect, 
@@ -180,23 +180,23 @@ class Map:
         # Create a basic grid layout if image analysis fails
         road_width = 96
         block_size = 300
-        
+
         # Initialize buildings list if needed
         if not hasattr(self, 'buildings'):
             self.buildings = []
-            
+
         # Initialize curbs list if needed
         if not hasattr(self, 'curbs'):
             self.curbs = []
 
         # Define wall width
         wall_width = 8
-        
+
         # Create horizontal and vertical roads
         for y in range(0, self.height, block_size):
             # Add road itself (not a wall)
             self.roads.append({"rect": pygame.Rect(0, y, self.width, road_width), "horizontal": True})
-            
+
             # Add visual curbs above and below roads (but don't make them blocking walls)
             if y > 0:  # Don't add curb at top of map
                 self.curbs.append({"rect": pygame.Rect(0, y - wall_width, self.width, wall_width)})
@@ -205,12 +205,12 @@ class Map:
         for x in range(0, self.width, block_size):
             # Add road itself (not a wall)
             self.roads.append({"rect": pygame.Rect(x, 0, road_width, self.height), "horizontal": False})
-            
+
             # Add visual curbs to left and right of roads (but don't make them blocking walls)
             if x > 0:  # Don't add curb at left edge of map
                 self.curbs.append({"rect": pygame.Rect(x - wall_width, 0, wall_width, self.height)})
             self.curbs.append({"rect": pygame.Rect(x + road_width, 0, wall_width, self.height)})
-        
+
         # Add buildings in non-road areas
         for x in range(road_width + 20, self.width, block_size):
             for y in range(road_width + 20, self.height, block_size):
@@ -222,16 +222,16 @@ class Map:
                         abs(y - road_rect.centery) < road_width * 1.5):
                         too_close = True
                         break
-                
+
                 if not too_close and random.random() < 0.7:  # 70% chance of building
                     building_size = random.randint(50, 150)
                     building_rect = pygame.Rect(
                         x, y, building_size, building_size
                     )
-                    
+
                     # Add building as a wall for collision
                     self.walls.append({"rect": building_rect})
-                    
+
                     # Also keep it in buildings list for drawing
                     self.buildings.append({
                         "rect": building_rect, 
@@ -256,25 +256,25 @@ class Map:
             else:
                 # Draw a solid color background first to ensure something is visible
                 screen.fill((100, 100, 100))  # Medium gray background
-                
+
                 # Draw the map with fixed positioning (no view_rect)
                 map_pos = (-camera_x, -camera_y)
                 screen.blit(self.map_image, map_pos)
-                
+
                 if not hasattr(self, '_first_draw'):
                     print("Map drawn successfully")
                     self._first_draw = True
                     print(f"Drawing map at position: {map_pos}")
                     print(f"Camera position: ({camera_x}, {camera_y})")
                     print(f"Map dimensions: {self.map_image.get_size()}")
-            
+
             # Draw a debug grid to help with positioning
             grid_size = 100
             grid_color = (200, 200, 200, 30)  # Very light gray, semi-transparent
-            
+
             # Create transparent surface for grid
             grid_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-            
+
             # Draw vertical grid lines
             for x in range(0, self.width, grid_size):
                 screen_x = x - camera_x
@@ -282,7 +282,7 @@ class Map:
                     pygame.draw.line(grid_surface, grid_color, 
                                    (screen_x, 0), 
                                    (screen_x, screen.get_height()))
-            
+
             # Draw horizontal grid lines
             for y in range(0, self.height, grid_size):
                 screen_y = y - camera_y
@@ -290,13 +290,13 @@ class Map:
                     pygame.draw.line(grid_surface, grid_color, 
                                    (0, screen_y), 
                                    (screen.get_width(), screen_y))
-            
+
             # Draw center markers
             center_x = self.width/2 - camera_x
             center_y = self.height/2 - camera_y
             if 0 <= center_x < screen.get_width() and 0 <= center_y < screen.get_height():
                 pygame.draw.circle(grid_surface, (255, 0, 0, 100), (int(center_x), int(center_y)), 10)
-            
+
             # Draw visual curbs (if they exist)
             if hasattr(self, 'curbs'):
                 for curb in self.curbs:
@@ -309,7 +309,7 @@ class Map:
                     if (curb_rect.right >= 0 and curb_rect.left <= screen.get_width() and
                         curb_rect.bottom >= 0 and curb_rect.top <= screen.get_height()):
                         pygame.draw.rect(grid_surface, (120, 120, 100, 150), curb_rect)
-            
+
             # Draw buildings for better visibility
             if hasattr(self, 'buildings'):
                 for building in self.buildings:
@@ -322,7 +322,7 @@ class Map:
                     if (building_rect.right >= 0 and building_rect.left <= screen.get_width() and
                         building_rect.bottom >= 0 and building_rect.top <= screen.get_height()):
                         pygame.draw.rect(grid_surface, building["color"], building_rect)
-            
+
             # Draw traffic lights at intersections
             if hasattr(self, 'traffic_lights'):
                 for light in self.traffic_lights:
@@ -330,19 +330,19 @@ class Map:
                     light_x, light_y = light['position']
                     screen_x = light_x - camera_x
                     screen_y = light_y - camera_y
-                    
+
                     # Skip if not on screen
                     if (screen_x < -20 or screen_x > screen.get_width() + 20 or
                         screen_y < -20 or screen_y > screen.get_height() + 20):
                         continue
-                    
+
                     # Draw traffic light pole
                     pygame.draw.rect(grid_surface, (50, 50, 50), 
                                   (screen_x - 3, screen_y - 3, 6, 6))
-                    
+
                     # Draw signal housings
                     light_box_size = 10
-                    
+
                     # Horizontal traffic light (controlling east-west traffic)
                     h_light_color = (0, 200, 0) if light['horizontal_green'] else (200, 0, 0)
                     pygame.draw.rect(grid_surface, (80, 80, 80), 
@@ -352,7 +352,7 @@ class Map:
                                     (int(screen_x - light_box_size - 5 + light_box_size//2), 
                                      int(screen_y)), 
                                     light_box_size//2 - 1)
-                    
+
                     # Vertical traffic light (controlling north-south traffic)
                     v_light_color = (200, 0, 0) if light['horizontal_green'] else (0, 200, 0)
                     pygame.draw.rect(grid_surface, (80, 80, 80), 
@@ -362,10 +362,10 @@ class Map:
                                     (int(screen_x), 
                                      int(screen_y - light_box_size - 5 + light_box_size//2)), 
                                     light_box_size//2 - 1)
-            
+
             # Blit grid to screen
             screen.blit(grid_surface, (0, 0))
-            
+
             # Apply time of day lighting effect
         except Exception as e:
             print(f"Error in Map.draw(): {e}")
@@ -492,33 +492,33 @@ class Map:
                     if light['timer'] >= 180:  # Individual light changes every 3 seconds
                         light['timer'] = 0
                         light['horizontal_green'] = not light['horizontal_green']
-        
+
         # Update regular vehicles with traffic light awareness
         for vehicle in self.vehicles:
             # Check if vehicle is near any traffic light
             at_traffic_light = False
             should_stop = False
-            
+
             if hasattr(self, 'traffic_lights'):
                 for light in self.traffic_lights:
                     # Calculate distance to traffic light
                     light_x, light_y = light['position']
                     distance = math.sqrt((vehicle.x - light_x)**2 + (vehicle.y - light_y)**2)
-                    
+
                     # If vehicle is close to traffic light (within 60 pixels)
                     if distance < 60:
                         at_traffic_light = True
                         # Determine if vehicle is moving horizontally or vertically
                         is_horizontal = vehicle.rotation in [0, 180]  # Horizontal if facing left/right
-                        
+
                         # Check if vehicle should stop based on light color and direction
                         if is_horizontal and not light['horizontal_green']:
                             should_stop = True  # Horizontal traffic has red light
                         elif not is_horizontal and light['horizontal_green']:
                             should_stop = True  # Vertical traffic has red light
-                        
+
                         break  # Only consider the closest traffic light
-            
+
             # Simple AI behavior with traffic light awareness
             if should_stop:
                 # Stop at red light
@@ -527,10 +527,10 @@ class Map:
                 # Basic AI - randomly change direction occasionally
                 if random.random() < 0.01:  # 1% chance to change direction each frame
                     vehicle.rotation = random.choice([0, 90, 180, 270])  # Choose a cardinal direction
-                
+
                 # Move forward at normal speed
                 vehicle.move(0.5, 0, self.walls)  # Move forward at half speed, no turning
-        
+
         # Update police AI (override traffic lights when in chase mode)
         for police in self.police_vehicles:
             police.update_ai(player, self.walls, self.roads)
@@ -562,52 +562,52 @@ class Map:
         """Create road segments for AI navigation based on a grid pattern similar to GTA"""
         # This method is called when using the procedural map generator
         # It creates road segments that vehicles can follow
-        
+
         # If roads are already defined, keep them
         if hasattr(self, 'roads') and self.roads:
             print(f"Using existing {len(self.roads)} road segments")
             return
-            
+
         # Initialize roads list if not already done
         if not hasattr(self, 'roads'):
             self.roads = []
-            
+
         # Initialize traffic lights if not already done
         if not hasattr(self, 'traffic_lights'):
             self.traffic_lights = []
-        
+
         # Time for traffic lights
         if not hasattr(self, 'traffic_light_timer'):
             self.traffic_light_timer = 0
-            
+
         # GTA-style city parameters
         block_size = 320  # Same as in procedural map generator
         road_width = 120  # Width of roads
-        
+
         # Create horizontal roads
         for y in range(road_width // 2, self.height, block_size):
             # Skip if too close to edge
             if y >= self.height - road_width // 2:
                 continue
-                
+
             # Add a complete road from left to right
             self.roads.append({
                 "rect": pygame.Rect(0, y - road_width // 2, self.width, road_width),
                 "horizontal": True
             })
-        
+
         # Create vertical roads
         for x in range(road_width // 2, self.width, block_size):
             # Skip if too close to edge
             if x >= self.width - road_width // 2:
                 continue
-                
+
             # Add a complete road from top to bottom
             self.roads.append({
                 "rect": pygame.Rect(x - road_width // 2, 0, road_width, self.height),
                 "horizontal": False
             })
-        
+
         # Create traffic lights at intersections
         for x in range(road_width // 2, self.width, block_size):
             for y in range(road_width // 2, self.height, block_size):
@@ -617,10 +617,10 @@ class Map:
                     "horizontal_green": True,  # Start with horizontal roads having green light
                     "timer": random.randint(0, 180)  # Randomize initial timers to prevent all lights changing at once
                 })
-            
+
         print(f"Generated {len(self.roads)} road segments for AI navigation")
         print(f"Added {len(self.traffic_lights)} traffic lights at intersections")
-            
+
     def get_sky_color(self):
         # Find the two closest time points
         times = sorted(self.sky_colors.keys())
@@ -960,12 +960,6 @@ class Player:
         self.wanted_cooldown = 0
 
     def move(self, dx, dy, walls):
-        # Debug output to understand the movement inputs
-        if dx != 0 or dy != 0:
-            print(f"Player move called with dx={dx}, dy={dy}")
-            print(f"Current position: ({self.x}, {self.y})")
-            print(f"Number of wall objects: {len(walls)}")
-
         # Update direction based on movement
         if dx != 0 or dy != 0:  # Only update direction if there's movement
             if abs(dx) > abs(dy):
@@ -989,87 +983,61 @@ class Player:
         # Check collision with walls - but try horizontal and vertical movements separately to allow sliding
         can_move_x = True
         can_move_y = True
-        
+
         # Create collision detection rectangles
         player_rect = pygame.Rect(self.x - self.size/2, self.y - self.size/2, self.size, self.size)
         new_rect = pygame.Rect(new_x - self.size/2, new_y - self.size/2, self.size, self.size)
         x_rect = pygame.Rect(new_x - self.size/2, self.y - self.size/2, self.size, self.size)
         y_rect = pygame.Rect(self.x - self.size/2, new_y - self.size/2, self.size, self.size)
-        
-        # Debug current rectangles
-        print(f"Current player_rect: {player_rect}")
-        print(f"Proposed new_rect: {new_rect}")
-        
+
+
         # First check X-axis movement only
         if dx != 0:
-            # Print X movement rectangle for debugging
-            print(f"X movement rect: {x_rect}")
-            
             x_collision = False
             # Check wall collisions
             for i, wall in enumerate(walls):
                 wall_rect = wall["rect"]
                 if x_rect.colliderect(wall_rect):
-                    print(f"Wall {i} collision on X-axis at {wall_rect}")
                     x_collision = True
                     can_move_x = False
                     break
-            
+
             if not x_collision:
-                print("No X-axis collisions detected")
                 # Ensure we're on a valid road for movement
                 # We'll use map directly from walls instead, since walls comes from the map
                 # Skip road validation for now to focus on collision detection
                 pass
-        
+
         # Then check Y-axis movement only
         if dy != 0:
-            # Print Y movement rectangle for debugging
-            print(f"Y movement rect: {y_rect}")
-            
             y_collision = False
             # Check wall collisions
             for i, wall in enumerate(walls):
                 wall_rect = wall["rect"]
                 if y_rect.colliderect(wall_rect):
-                    print(f"Wall {i} collision on Y-axis at {wall_rect}")
                     y_collision = True
                     can_move_y = False
                     break
-            
+
             if not y_collision:
-                print("No Y-axis collisions detected")
                 # We'll use map directly from walls instead, since walls comes from the map
                 # Skip road validation for now to focus on collision detection
                 pass
-        
+
         # Apply movement based on what's allowed
         if can_move_x:
             self.x = new_x
-            print(f"Player moved horizontally to x={self.x}")
-        else:
-            print(f"Horizontal movement blocked, staying at x={self.x}")
-        
         if can_move_y:
             self.y = new_y
-            print(f"Player moved vertically to y={self.y}")
-        else:
-            print(f"Vertical movement blocked, staying at y={self.y}")
-            
+
         # Update player rectangle after movement
         self.rect = pygame.Rect(self.x - self.size/2, self.y - self.size/2, self.size, self.size)
-        
-        if dx != 0 or dy != 0:
-            if can_move_x or can_move_y:
-                print(f"Player moved to final position ({self.x}, {self.y})")
-            else:
-                print(f"Movement completely blocked, player stayed at ({self.x}, {self.y})")
 
     def draw(self, screen, camera_x, camera_y):
         try:
             screen_x = self.x - camera_x
             screen_y = self.y - camera_y
-            
+
             # Debug output on first draw
             if not hasattr(self, '_first_draw'):
                 print(f"Player drawing: world pos ({self.x}, {self.y}), screen pos ({screen_x}, {screen_y})")
@@ -1088,7 +1056,7 @@ class Player:
             head_top = self.size - head_bob
             head_bottom = self.size + head_bob
             head_width = self.size * 0.8
-            
+
             # Add debug outline to make character more visible
             pygame.draw.rect(char_surface, (255, 255, 0, 100), (0, 0, self.size * 2, self.size * 2), 1)
 
@@ -1105,7 +1073,7 @@ class Player:
                 self.colors['skin'],
                 (self.size - head_width/2, head_bottom - head_width/2, head_width * 0.8, head_width * 0.4)
             )
-        
+
             # Beady eyes
             eye_size = 2
             eye_spacing = 4
@@ -1204,7 +1172,7 @@ class Player:
                 weapon_width = 3
                 weapon_surface = pygame.Surface((weapon_length, weapon_width), pygame.SRCALPHA)
                 pygame.draw.rect(weapon_surface, (255, 100, 0), (0, 0, weapon_length, weapon_width))  # Bright orange
-                
+
                 # Add glow effect
                 glow_surface = pygame.Surface((weapon_length+4, weapon_width+4), pygame.SRCALPHA)
                 pygame.draw.rect(glow_surface, (255, 255, 0, 100), (0, 0, weapon_length+4, weapon_width+4))  # Yellow glow
@@ -1217,7 +1185,7 @@ class Player:
                 char_surface.blit(rotated_glow, 
                                 (weapon_x - rotated_glow.get_width()/2, 
                                  weapon_y - rotated_glow.get_height()/2))
-                                 
+
                 # Draw weapon on character
                 char_surface.blit(rotated_weapon, 
                                 (weapon_x - rotated_weapon.get_width()/2, 
@@ -1692,7 +1660,7 @@ class Pedestrian:
                 # Standing still legs
                 left_leg = [
                     (self.size - self.size * 0.25, self.size + self.size * 0.5),
-                    (self.size - self.size * 0.15, self.size + self.size * 0.5),
+                    (self.size- self.size * 0.15, self.size + self.size * 0.5),
                     (self.size - self.size * 0.2, self.size + self.size * 0.8),
                     (self.size - self.size * 0.3, self.size + self.size * 0.8)
                 ]
@@ -2021,17 +1989,17 @@ class Game:
         # Don't re-initialize pygame if already done
         if not pygame.get_init():
             pygame.init()
-            
+
         # Print detailed screen information
         print("Creating display...")
-        
+
         self.width = 800
         self.height = 600
-        
+
         try:
             # Use resizable window for desktop mode
             is_desktop = not os.environ.get('REPL_ID') and not detect_mobile()
-            
+
             if is_desktop:
                 self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
                 pygame.display.set_caption("GTA-Style Game - Desktop Mode (Resizable)")
@@ -2039,12 +2007,12 @@ class Game:
             else:
                 self.screen = pygame.display.set_mode((self.width, self.height))
                 pygame.display.set_caption("GTA-Style Game")
-            
+
             print(f"Display mode set: {self.width}x{self.height}")
         except Exception as e:
             print(f"Error setting display mode: {e}")
             raise
-            
+
         # Print control instructions
         print("=== GAME CONTROLS ===")
         print("WASD: Move character")
@@ -2069,11 +2037,11 @@ class Game:
         # Initialize camera centered on player
         self.camera_x = self.player.x - self.width/2
         self.camera_y = self.player.y - self.height/2
-        
+
         # Force camera to valid position
         self.camera_x = max(0, min(self.camera_x, self.map.width - self.width))
         self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
-        
+
         print(f"Initial player position: ({self.player.x}, {self.player.y})")
         print(f"Initial camera position: ({self.camera_x}, {self.camera_y})")
 
@@ -2087,7 +2055,7 @@ class Game:
         self.show_debug = False
         self.font = pygame.font.SysFont(None, 24)
         self.big_font = pygame.font.SysFont(None, 48)
-        
+
         # Mobile touch controls
         self.touch_enabled = True
         self.touch_buttons = {}
@@ -2095,10 +2063,10 @@ class Game:
         self.touch_button_margin = 20
         self.touch_button_alpha = 180  # Semi-transparent
         self.touch_active = {}  # Track which buttons are being pressed
-        
+
         # Initialize touch controls
         self.init_touch_controls()
-        
+
         # Create pause menu button
         self.pause_button = {
             "pos": (self.width - 40, 40),
@@ -2167,7 +2135,7 @@ class Game:
                     self.width = event.w
                     self.height = event.h
                     self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
-            
+
             # Touch support for mobile
             elif event.type == pygame.MOUSEBUTTONDOWN and self.touch_enabled:
                 # Check for pause button press
@@ -2179,7 +2147,7 @@ class Game:
                     self.paused = not self.paused
                     self.pause_active = True
                     continue  # Skip other button checks when pause is pressed
-                
+
                 # Only process other buttons when not paused
                 if not self.paused:
                     # Check if any touch buttons were pressed
@@ -2187,22 +2155,22 @@ class Game:
                         # Check if touch is within button radius
                         button_pos = button["pos"]
                         distance = math.sqrt((pos[0] - button_pos[0])**2 + (pos[1] - button_pos[1])**2)
-                        
+
                         if distance <= button["radius"]:
                             self.touch_active[name] = True
-                            
+
                             # Perform action immediately for action buttons
                             if name == "action":
                                 self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
                             elif name == "shoot":
                                 self.player.shoot()
-            
+
             elif event.type == pygame.MOUSEBUTTONUP and self.touch_enabled:
                 # Reset all touch buttons and pause button
                 for name in self.touch_active:
                     self.touch_active[name] = False
                 self.pause_active = False
-                    
+
             # Track touch movement for continuous control (only when not paused)
             elif event.type == pygame.MOUSEMOTION and self.touch_enabled and pygame.mouse.get_pressed()[0] and not self.paused:
                 # Check if a direction button is being touched
@@ -2211,36 +2179,36 @@ class Game:
                     # Only check directional buttons
                     if name not in ["up", "down", "left", "right"]:
                         continue
-                        
+
                     # Check if touch is within button radius
                     button_pos = button["pos"]
                     distance = math.sqrt((pos[0] - button_pos[0])**2 + (pos[1] - button_pos[1])**2)
-                    
+
                     if distance <= button["radius"]:
                         self.touch_active[name] = True
                     else:
                         self.touch_active[name] = False
-                        
+
     def draw_pause_button(self):
         """Draw the pause button in the corner of the screen"""
         if not self.touch_enabled:
             return
-        
+
         # Create semi-transparent surface
         button_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        
+
         # Get button properties
         color = list(self.pause_button["color"])
         if self.pause_active or self.paused:
             # Brighten when active or paused
             color = [min(c + 70, 255) for c in color]
-        
+
         # Add alpha
         color.append(self.touch_button_alpha)
-        
+
         # Draw button
         pygame.draw.circle(button_surface, color, self.pause_button["pos"], self.pause_button["radius"])
-        
+
         # Add label
         font = pygame.font.SysFont(None, 36)
         if self.paused:
@@ -2249,45 +2217,45 @@ class Game:
             label = font.render(self.pause_button["label"], True, (255, 255, 255))
         label_rect = label.get_rect(center=self.pause_button["pos"])
         button_surface.blit(label, label_rect)
-        
+
         # Blit to screen
         self.screen.blit(button_surface, (0, 0))
-        
+
     def draw_pause_menu(self):
         """Draw the pause menu with map overview"""
         if not self.paused:
             return
-            
+
         # Create semi-transparent overlay
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))  # Dark semi-transparent background
         self.screen.blit(overlay, (0, 0))
-        
+
         # Draw title
         title = self.big_font.render("GAME PAUSED", True, (255, 255, 255))
         title_rect = title.get_rect(center=(self.width/2, 50))
         self.screen.blit(title, title_rect)
-        
+
         # Draw full map at reduced scale
         map_scale = 0.25  # Scale to fit on screen
         map_width = int(self.map.width * map_scale)
         map_height = int(self.map.height * map_scale)
-        
+
         # Create scaled map surface
         scaled_map = pygame.transform.scale(self.map.map_image, (map_width, map_height))
-        
+
         # Calculate position to center map
         map_x = self.width/2 - map_width/2
         map_y = self.height/2 - map_height/2 + 20  # +20 to account for title
-        
+
         # Draw scaled map
         self.screen.blit(scaled_map, (map_x, map_y))
-        
+
         # Draw player position on map
         player_map_x = map_x + (self.player.x * map_scale)
         player_map_y = map_y + (self.player.y * map_scale)
         pygame.draw.circle(self.screen, (255, 0, 0), (int(player_map_x), int(player_map_y)), 5)
-        
+
         # Draw resume instructions
         instr = self.font.render("Touch pause button or press ESC to resume", True, (255, 255, 255))
         instr_rect = instr.get_rect(center=(self.width/2, self.height - 50))
@@ -2298,7 +2266,7 @@ class Game:
         # D-pad positions (bottom left)
         center_x = self.touch_button_margin + self.touch_button_radius * 3
         center_y = self.height - self.touch_button_margin - self.touch_button_radius * 3
-        
+
         # Direction buttons (D-pad style)
         self.touch_buttons["up"] = {
             "pos": (center_x, center_y - self.touch_button_radius * 2),
@@ -2328,7 +2296,7 @@ class Game:
             "label": "→",
             "key": pygame.K_d
         }
-        
+
         # Action buttons (bottom right)
         # Enter/exit vehicle
         self.touch_buttons["action"] = {
@@ -2339,7 +2307,7 @@ class Game:
             "label": "E",
             "key": pygame.K_e
         }
-        
+
         # Shoot
         self.touch_buttons["shoot"] = {
             "pos": (self.width - self.touch_button_margin - self.touch_button_radius, 
@@ -2349,7 +2317,7 @@ class Game:
             "label": "🔫",
             "key": pygame.K_SPACE
         }
-        
+
         # Initialize active state for all buttons
         for button in self.touch_buttons:
             self.touch_active[button] = False
@@ -2358,32 +2326,32 @@ class Game:
         """Draw on-screen touch controls"""
         if not self.touch_enabled:
             return
-            
+
         # Create a surface for the semi-transparent controls
         control_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        
+
         # Draw each button
         for name, button in self.touch_buttons.items():
             # Draw the button circle
             color = list(button["color"])
-            
+
             # Make active buttons brighter
             if self.touch_active[name]:
                 # Brighten the color
                 color = [min(c + 70, 255) for c in color]
-            
+
             # Set alpha transparency
             color.append(self.touch_button_alpha)
-            
+
             # Draw the button
             pygame.draw.circle(control_surface, color, button["pos"], button["radius"])
-            
+
             # Add button label
             font = pygame.font.SysFont(None, 36)
             label = font.render(button["label"], True, (255, 255, 255))
             label_rect = label.get_rect(center=button["pos"])
             control_surface.blit(label, label_rect)
-        
+
         # Blit the control surface onto the screen
         self.screen.blit(control_surface, (0, 0))
 
@@ -2391,7 +2359,7 @@ class Game:
         # Use a much tighter zoom level for authentic GTA1/2 view
         # This creates a very zoomed-in view focused primarily on the player and immediate surroundings
         zoom_factor = 0.4  # Much smaller number for much closer zoom (GTA1/2 style)
-        
+
         # Calculate target camera position (centered on player with zoom)
         target_camera_x = self.player.x - (self.width * zoom_factor)
         target_camera_y = self.player.y - (self.height * zoom_factor)
@@ -2417,12 +2385,12 @@ class Game:
 
             # Clear screen for each frame
             self.screen.fill((0, 0, 0))
-            
+
             # Print debug once to see if we're getting here
             if hasattr(self, '_first_run') == False:
                 print("First frame rendering...")
                 self._first_run = True
-            
+
             # Only update game state if not paused
             if not self.paused:
                 if not self.player.in_vehicle:
@@ -2430,7 +2398,7 @@ class Game:
                     dy = 0
                     # Add a much clearer key press debug
                     print(f"DEBUG: Key states - W:{keys[pygame.K_w]} A:{keys[pygame.K_a]} S:{keys[pygame.K_s]} D:{keys[pygame.K_d]}")
-                    
+
                     # Keyboard input with debug output - enhanced speed
                     if keys[pygame.K_w]: 
                         dy -= 3  # Faster movement
@@ -2444,16 +2412,16 @@ class Game:
                     if keys[pygame.K_d]: 
                         dx += 3  # Faster movement
                         print("D key pressed - Moving RIGHT FAST")
-                    
+
                     # Touch input
                     if self.touch_enabled:
                         # Make sure touch_active dictionary is initialized
                         if not hasattr(self, 'touch_active') or self.touch_active is None:
                             self.touch_active = {}
-                            
+
                         # Debug touch button states
                         print(f"Touch states: UP:{self.touch_active.get('up', False)} DOWN:{self.touch_active.get('down', False)} LEFT:{self.touch_active.get('left', False)} RIGHT:{self.touch_active.get('right', False)}")
-                        
+
                         if self.touch_active.get("up", False): 
                             dy -= 3  # Faster movement to match keyboard
                             print("Touch UP active - Moving UP FAST")
@@ -2466,14 +2434,14 @@ class Game:
                         if self.touch_active.get("right", False): 
                             dx += 3  # Faster movement to match keyboard
                             print("Touch RIGHT active - Moving RIGHT FAST")
-                        
+
                         # Automatic movement testing is completely optional
                         # For PC users, this allows testing without requiring keyboard/mouse
                         # Comment out this section to disable automatic movement
                         if os.environ.get('REPL_ID') and dx == 0 and dy == 0:
                             # Only run automated movement in Replit environment for testing
                             test_direction = (self.frame_count // 30) % 4  # Change direction every 0.5 seconds
-                            
+
                             # Apply test movement if no input detected
                             if test_direction == 0:
                                 dx = -3  # left (faster)
@@ -2491,11 +2459,11 @@ class Game:
                                 dx = 0
                                 dy = 3  # down (faster)
                                 print("TEST: Moving DOWN FAST")
-                    
+
                     # Debug info about input values
                     if dx != 0 or dy != 0:
                         print(f"Movement input values: dx={dx}, dy={dy}")
-                    
+
                     self.player.move(dx, dy, self.map.walls)
                 else:
                     # Vehicle controls
@@ -2506,14 +2474,14 @@ class Game:
                     if keys[pygame.K_s]: forward = -1
                     if keys[pygame.K_a]: turn = -1
                     if keys[pygame.K_d]: turn = 1
-                    
+
                     # Touch input
                     if self.touch_enabled:
                         if self.touch_active["up"]: forward = 1
                         if self.touch_active["down"]: forward = -1
                         if self.touch_active["left"]: turn = -1
                         if self.touch_active["right"]: turn = 1
-                    
+
                     self.player.in_vehicle.move(forward, turn, self.map.walls)
                     # Update player position to vehicle position
                     self.player.x = self.player.in_vehicle.x
@@ -2544,21 +2512,21 @@ class Game:
             # Draw UI elements
             self.player.draw_wanted_level(self.screen)
             self.map.draw_minimap(self.screen, self.player.x, self.player.y)
-            
+
             # Only show controls help when not paused
             if not self.paused:
                 self.draw_controls_help()
-            
+
             self.draw_debug_info()
-            
+
             # Draw touch controls if not paused
             if self.touch_enabled and not self.paused:
                 self.draw_touch_controls()
-                
+
             # Always draw pause button
             if self.touch_enabled:
                 self.draw_pause_button()
-                
+
             # Draw pause menu if paused
             if self.paused:
                 self.draw_pause_menu()
@@ -2568,16 +2536,16 @@ class Game:
                 # Use both update and flip to ensure rendering
                 pygame.display.update()
                 pygame.display.flip()
-                
+
                 if not hasattr(self, '_display_updated'):
                     print("First display update successful")
                     self._display_updated = True
             except Exception as e:
                 print(f"Error updating display: {e}")
-                
+
             # Increment frame counter
             self.frame_count += 1
-            
+
             # Control frame rate
             self.clock.tick(60)
 
@@ -2598,28 +2566,28 @@ def main():
     if os.environ.get('REPL_ID'):
         os.environ['SDL_VIDEODRIVER'] = 'x11'
         os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
-    
+
     # Only set mobile mode if we're actually on mobile
     is_mobile = detect_mobile()
-    
+
     try:
         pygame.init()
         print("Pygame initialized successfully")
-        
+
         # Print display info
         print(f"Display driver: {pygame.display.get_driver()}")
         print(f"Display info: {pygame.display.Info()}")
-        
+
         game = Game()
-        
+
         # Set touch mode based on device
         game.touch_enabled = is_mobile
-        
+
         # If we're on mobile, adjust display settings
         if is_mobile:
             print("Mobile device detected, enabling touch controls")
             # Could adjust other settings here like UI scaling
-        
+
         game.run()
     except Exception as e:
         print(f"Error in main: {e}")
