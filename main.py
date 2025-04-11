@@ -2059,6 +2059,13 @@ class Game:
         # Mobile touch controls
         self.touch_enabled = True
         self.touch_buttons = {}
+        
+        # Auto control settings for VNC/keyboard issues
+        self.auto_control_enabled = True  # Set to True to enable automatic movement
+        self.auto_control_type = "rotate4"  # Options: "rotate4", "random", "none"
+        self.auto_control_timer = 0
+        self.auto_control_duration = 60  # How many frames to hold each direction
+        self.show_auto_control_info = True  # Show the info screen on startup
         self.touch_button_radius = 40
         self.touch_button_margin = 20
         self.touch_button_alpha = 180  # Semi-transparent
@@ -2086,7 +2093,9 @@ class Game:
             f"In Vehicle: {self.player.in_vehicle is not None}",
             f"Wanted Level: {self.player.wanted_level:.1f}",
             f"Pedestrians: {len(self.map.pedestrians)}",
-            f"Police: {len(self.map.police_vehicles)}"
+            f"Police: {len(self.map.police_vehicles)}",
+            f"Auto-control: {hasattr(self, 'auto_control_enabled') and self.auto_control_enabled}",
+            f"Auto-timer: {hasattr(self, 'auto_control_timer') and self.auto_control_timer}"
         ]
 
         y = 10
@@ -2094,6 +2103,33 @@ class Game:
             text = self.font.render(info, True, (255, 255, 255))
             self.screen.blit(text, (10, y))
             y += 20
+            
+    def draw_auto_control_info(self):
+        """Draw the auto-control information overlay"""
+        if not hasattr(self, 'auto_control_enabled') or not self.auto_control_enabled:
+            return
+            
+        # Show auto-control status in the top right corner
+        if hasattr(self, 'auto_control_timer') and self.auto_control_timer > 0:
+            # Draw semi-transparent background
+            overlay = pygame.Surface((300, 80), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 180))  # Black with alpha
+            self.screen.blit(overlay, (self.width - 310, 10))
+            
+            # Draw auto-control text
+            auto_text = self.font.render("AUTO-CONTROL ACTIVE", True, (255, 255, 0))
+            self.screen.blit(auto_text, (self.width - 300, 20))
+            
+            # Show more details about current auto control state
+            if not self.player.in_vehicle:
+                mode_text = self.font.render("Mode: Pedestrian", True, (200, 200, 200))
+            else:
+                mode_text = self.font.render("Mode: Vehicle", True, (200, 200, 200))
+            self.screen.blit(mode_text, (self.width - 300, 45))
+            
+            # Show a hint about keyboard controls
+            hint_text = self.font.render("Press any movement key to take control", True, (200, 200, 200))
+            self.screen.blit(hint_text, (self.width - 300, 70))
 
     def draw_controls_help(self):
         controls = [
@@ -2114,10 +2150,42 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_e and not self.paused:
-                    self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
-                elif event.key == pygame.K_SPACE and not self.paused:
-                    self.player.shoot()
+                # Debug output for key presses to help diagnose issues
+                print(f"Key pressed: {pygame.key.name(event.key)} (key code: {event.key})")
+                
+                # Update our custom key states for KEYDOWN events
+                if event.key == pygame.K_w:
+                    self.key_states['w'] = True
+                    print("W key pressed - state set to True")
+                elif event.key == pygame.K_a:
+                    self.key_states['a'] = True
+                    print("A key pressed - state set to True")
+                elif event.key == pygame.K_s:
+                    self.key_states['s'] = True
+                    print("S key pressed - state set to True")
+                elif event.key == pygame.K_d:
+                    self.key_states['d'] = True
+                    print("D key pressed - state set to True")
+                elif event.key == pygame.K_UP:
+                    self.key_states['up'] = True
+                    print("UP key pressed - state set to True")
+                elif event.key == pygame.K_DOWN:
+                    self.key_states['down'] = True
+                    print("DOWN key pressed - state set to True")
+                elif event.key == pygame.K_LEFT:
+                    self.key_states['left'] = True
+                    print("LEFT key pressed - state set to True")
+                elif event.key == pygame.K_RIGHT:
+                    self.key_states['right'] = True
+                    print("RIGHT key pressed - state set to True")
+                elif event.key == pygame.K_SPACE:
+                    self.key_states['space'] = True
+                    if not self.paused:
+                        self.player.shoot()
+                elif event.key == pygame.K_e:
+                    self.key_states['e'] = True
+                    if not self.paused:
+                        self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
                 elif event.key == pygame.K_ESCAPE:
@@ -2127,6 +2195,29 @@ class Game:
                 elif event.key == pygame.K_q and pygame.key.get_mods() & pygame.KMOD_CTRL:
                     print("Ctrl+Q pressed - exiting game")
                     self.running = False
+                    
+            elif event.type == pygame.KEYUP:
+                # Update our custom key states for KEYUP events
+                if event.key == pygame.K_w:
+                    self.key_states['w'] = False
+                elif event.key == pygame.K_a:
+                    self.key_states['a'] = False
+                elif event.key == pygame.K_s:
+                    self.key_states['s'] = False
+                elif event.key == pygame.K_d:
+                    self.key_states['d'] = False
+                elif event.key == pygame.K_UP:
+                    self.key_states['up'] = False
+                elif event.key == pygame.K_DOWN:
+                    self.key_states['down'] = False
+                elif event.key == pygame.K_LEFT:
+                    self.key_states['left'] = False
+                elif event.key == pygame.K_RIGHT:
+                    self.key_states['right'] = False
+                elif event.key == pygame.K_SPACE:
+                    self.key_states['space'] = False
+                elif event.key == pygame.K_e:
+                    self.key_states['e'] = False
             # Handle window resize events for PC mode
             elif event.type == pygame.VIDEORESIZE:
                 # Only handle resize events when not on Replit
@@ -2376,12 +2467,45 @@ class Game:
 
     def run(self):
         print("Game.run() started")
+        
+        # Define direct keyboard state variables that bypass pygame.key.get_pressed()
+        # This will help with environments where key presses aren't properly detected
+        self.key_states = {
+            'up': False,
+            'down': False,
+            'left': False,
+            'right': False,
+            'w': False,
+            'a': False,
+            's': False,
+            'd': False,
+            'space': False,
+            'e': False
+        }
+        
+        # Reset auto-control timer for this game session
+        self.auto_control_timer = 0
+        
         while self.running:
-            # Handle events
+            # Handle events and update our custom key state tracking
             self.handle_events()
 
-            # Get keyboard state
+            # Get keyboard state - force refresh before checking
+            pygame.event.pump()  # Process event queue to ensure key state is current
             keys = pygame.key.get_pressed()
+            
+            # Update our custom key tracking from pygame's key states
+            # This gives us two layers of key tracking for robustness
+            self.key_states['up'] = keys[pygame.K_UP]
+            self.key_states['down'] = keys[pygame.K_DOWN]
+            self.key_states['left'] = keys[pygame.K_LEFT]
+            self.key_states['right'] = keys[pygame.K_RIGHT]
+            self.key_states['w'] = keys[pygame.K_w]
+            self.key_states['a'] = keys[pygame.K_a]
+            self.key_states['s'] = keys[pygame.K_s]
+            self.key_states['d'] = keys[pygame.K_d]
+            self.key_states['space'] = keys[pygame.K_SPACE]
+            self.key_states['e'] = keys[pygame.K_e]
 
             # Clear screen for each frame
             self.screen.fill((0, 0, 0))
@@ -2398,20 +2522,38 @@ class Game:
                     dy = 0
                     # Add a much clearer key press debug
                     print(f"DEBUG: Key states - W:{keys[pygame.K_w]} A:{keys[pygame.K_a]} S:{keys[pygame.K_s]} D:{keys[pygame.K_d]}")
+                    print(f"DEBUG: Arrow keys - UP:{keys[pygame.K_UP]} LEFT:{keys[pygame.K_LEFT]} DOWN:{keys[pygame.K_DOWN]} RIGHT:{keys[pygame.K_RIGHT]}")
+                    print(f"DEBUG: Custom key tracking - W:{self.key_states['w']} A:{self.key_states['a']} S:{self.key_states['s']} D:{self.key_states['d']}")
+                    print(f"DEBUG: Custom arrow tracking - UP:{self.key_states['up']} LEFT:{self.key_states['left']} DOWN:{self.key_states['down']} RIGHT:{self.key_states['right']}")
 
-                    # Keyboard input with debug output - enhanced speed
-                    if keys[pygame.K_w]: 
+                    # First check our custom key state tracking
+                    if self.key_states['w'] or self.key_states['up']: 
                         dy -= 3  # Faster movement
-                        print("W key pressed - Moving UP FAST")
-                    if keys[pygame.K_s]: 
+                        print("UP control active - Moving UP FAST")
+                    if self.key_states['s'] or self.key_states['down']: 
                         dy += 3  # Faster movement
-                        print("S key pressed - Moving DOWN FAST")
-                    if keys[pygame.K_a]: 
+                        print("DOWN control active - Moving DOWN FAST")
+                    if self.key_states['a'] or self.key_states['left']: 
                         dx -= 3  # Faster movement
-                        print("A key pressed - Moving LEFT FAST")
-                    if keys[pygame.K_d]: 
+                        print("LEFT control active - Moving LEFT FAST")
+                    if self.key_states['d'] or self.key_states['right']: 
                         dx += 3  # Faster movement
-                        print("D key pressed - Moving RIGHT FAST")
+                        print("RIGHT control active - Moving RIGHT FAST")
+                    
+                    # Fallback to normal pygame key detection if our custom tracking fails
+                    if dx == 0 and dy == 0:
+                        if keys[pygame.K_w] or keys[pygame.K_UP]: 
+                            dy -= 3
+                            print("Fallback UP key detected")
+                        if keys[pygame.K_s] or keys[pygame.K_DOWN]: 
+                            dy += 3
+                            print("Fallback DOWN key detected")
+                        if keys[pygame.K_a] or keys[pygame.K_LEFT]: 
+                            dx -= 3
+                            print("Fallback LEFT key detected")
+                        if keys[pygame.K_d] or keys[pygame.K_RIGHT]: 
+                            dx += 3
+                            print("Fallback RIGHT key detected")
 
                     # Touch input
                     if self.touch_enabled:
@@ -2435,30 +2577,61 @@ class Game:
                             dx += 3  # Faster movement to match keyboard
                             print("Touch RIGHT active - Moving RIGHT FAST")
 
-                        # Automatic movement testing is completely optional
-                        # For PC users, this allows testing without requiring keyboard/mouse
-                        # Comment out this section to disable automatic movement
-                        if os.environ.get('REPL_ID') and dx == 0 and dy == 0:
-                            # Only run automated movement in Replit environment for testing
-                            test_direction = (self.frame_count // 30) % 4  # Change direction every 0.5 seconds
-
-                            # Apply test movement if no input detected
-                            if test_direction == 0:
-                                dx = -3  # left (faster)
-                                dy = 0
-                                print("TEST: Moving LEFT FAST")
-                            elif test_direction == 1:
-                                dx = 0 
-                                dy = -3  # up (faster)
-                                print("TEST: Moving UP FAST")
-                            elif test_direction == 2:
-                                dx = 3  # right (faster)
-                                dy = 0
-                                print("TEST: Moving RIGHT FAST")
-                            else:
-                                dx = 0
-                                dy = 3  # down (faster)
-                                print("TEST: Moving DOWN FAST")
+                        # VNC auto-control for players when keyboard isn't working
+                        # For players in VNC or other environments where keyboard might not work
+                        if dx == 0 and dy == 0 and self.auto_control_enabled:
+                            # Update the auto-control timer
+                            self.auto_control_timer += 1
+                            
+                            # Determine current phase of movement based on timer
+                            if self.auto_control_type == "rotate4":
+                                # Cycle through 4 directions: left, up, right, down
+                                phase = (self.auto_control_timer // self.auto_control_duration) % 4
+                                
+                                # Only start auto-control after a delay to let real input take precedence
+                                if self.auto_control_timer > 120:  # Wait 2 seconds (120 frames at 60fps)
+                                    if phase == 0:
+                                        dx = -3  # left (faster)
+                                        dy = 0
+                                        # Set key states for visual feedback in debug
+                                        self.key_states['left'] = True
+                                        self.key_states['a'] = True
+                                        print("AUTO: Moving LEFT")
+                                    elif phase == 1:
+                                        dx = 0 
+                                        dy = -3  # up (faster)
+                                        self.key_states['up'] = True
+                                        self.key_states['w'] = True
+                                        print("AUTO: Moving UP")
+                                    elif phase == 2:
+                                        dx = 3  # right (faster)
+                                        dy = 0
+                                        self.key_states['right'] = True
+                                        self.key_states['d'] = True
+                                        print("AUTO: Moving RIGHT")
+                                    else:
+                                        dx = 0
+                                        dy = 3  # down (faster)
+                                        self.key_states['down'] = True
+                                        self.key_states['s'] = True
+                                        print("AUTO: Moving DOWN")
+                                    
+                                    # After each movement cycle, trigger a random action
+                                    if self.auto_control_timer % (self.auto_control_duration * 4) == 0:
+                                        # Press E to try to enter/exit vehicles
+                                        print("AUTO: Trying to enter/exit vehicle")
+                                        self.key_states['e'] = True
+                                        self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
+                                    
+                                    # Fire weapon occasionally
+                                    if self.auto_control_timer % (self.auto_control_duration * 7) == 0:
+                                        print("AUTO: Firing weapon")
+                                        self.key_states['space'] = True
+                                        self.player.shoot()
+                            
+                            # Reset auto-control states after every 4000 frames to avoid potential issues
+                            if self.auto_control_timer > 4000:
+                                self.auto_control_timer = 0
 
                     # Debug info about input values
                     if dx != 0 or dy != 0:
@@ -2469,11 +2642,27 @@ class Game:
                     # Vehicle controls
                     forward = 0
                     turn = 0
-                    # Keyboard input
-                    if keys[pygame.K_w]: forward = 1
-                    if keys[pygame.K_s]: forward = -1
-                    if keys[pygame.K_a]: turn = -1
-                    if keys[pygame.K_d]: turn = 1
+                    
+                    # Print debugging info for keyboard states
+                    print(f"DEBUG: Vehicle - Custom key states - W:{self.key_states['w']} S:{self.key_states['s']} A:{self.key_states['a']} D:{self.key_states['d']}")
+                    print(f"DEBUG: Vehicle - Custom arrow states - UP:{self.key_states['up']} DOWN:{self.key_states['down']} LEFT:{self.key_states['left']} RIGHT:{self.key_states['right']}")
+                    
+                    # First try custom key state tracking
+                    if self.key_states['w'] or self.key_states['up']: forward = 1
+                    if self.key_states['s'] or self.key_states['down']: forward = -1
+                    if self.key_states['a'] or self.key_states['left']: turn = -1
+                    if self.key_states['d'] or self.key_states['right']: turn = 1
+                    
+                    # If no input from custom tracking, try standard pygame key detection
+                    if forward == 0 and turn == 0:
+                        if keys[pygame.K_w] or keys[pygame.K_UP]: forward = 1
+                        if keys[pygame.K_s] or keys[pygame.K_DOWN]: forward = -1
+                        if keys[pygame.K_a] or keys[pygame.K_LEFT]: turn = -1
+                        if keys[pygame.K_d] or keys[pygame.K_RIGHT]: turn = 1
+                    
+                    # Debug output for vehicle controls
+                    if forward != 0 or turn != 0:
+                        print(f"Vehicle controls: forward={forward}, turn={turn}")
 
                     # Touch input
                     if self.touch_enabled:
@@ -2481,6 +2670,59 @@ class Game:
                         if self.touch_active["down"]: forward = -1
                         if self.touch_active["left"]: turn = -1
                         if self.touch_active["right"]: turn = 1
+                    
+                    # Auto-control for vehicle if no input detected
+                    if forward == 0 and turn == 0 and self.auto_control_enabled:
+                        # Update auto-control timer
+                        self.auto_control_timer += 1
+                        
+                        # Only start auto-control after a delay
+                        if self.auto_control_timer > 180:  # Wait 3 seconds (180 frames)
+                            phase = (self.auto_control_timer // self.auto_control_duration) % 6
+                            
+                            # More complex vehicle behavior - drive forward with occasional turns
+                            if phase == 0:
+                                forward = 1  # Drive forward
+                                turn = 0
+                                self.key_states['w'] = True
+                                self.key_states['up'] = True
+                                print("AUTO VEHICLE: Driving forward")
+                            elif phase == 1:
+                                forward = 1  # Turn right while moving
+                                turn = 1
+                                self.key_states['w'] = True
+                                self.key_states['d'] = True
+                                print("AUTO VEHICLE: Turning right")
+                            elif phase == 2:
+                                forward = 1  # Drive forward again
+                                turn = 0
+                                self.key_states['w'] = True
+                                self.key_states['up'] = True
+                                print("AUTO VEHICLE: Driving forward")
+                            elif phase == 3:
+                                forward = 1  # Turn left while moving
+                                turn = -1
+                                self.key_states['w'] = True
+                                self.key_states['a'] = True
+                                print("AUTO VEHICLE: Turning left")
+                            elif phase == 4:
+                                forward = 1  # More forward
+                                turn = 0
+                                self.key_states['w'] = True
+                                self.key_states['up'] = True
+                                print("AUTO VEHICLE: Driving forward")
+                            else:
+                                forward = -1  # Occasional reverse
+                                turn = 0
+                                self.key_states['s'] = True
+                                self.key_states['down'] = True
+                                print("AUTO VEHICLE: Reversing")
+                            
+                            # Occasionally exit the vehicle
+                            if self.auto_control_timer % (self.auto_control_duration * 12) == 0:
+                                print("AUTO: Trying to exit vehicle")
+                                self.key_states['e'] = True
+                                self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
 
                     self.player.in_vehicle.move(forward, turn, self.map.walls)
                     # Update player position to vehicle position
@@ -2512,6 +2754,9 @@ class Game:
             # Draw UI elements
             self.player.draw_wanted_level(self.screen)
             self.map.draw_minimap(self.screen, self.player.x, self.player.y)
+            
+            # Draw auto-control information if active
+            self.draw_auto_control_info()
 
             # Only show controls help when not paused
             if not self.paused:
