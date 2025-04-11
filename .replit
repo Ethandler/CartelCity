@@ -33,6 +33,7 @@ args = "python main.py"
 [[workflows.workflow]]
 name = "WebServer"
 author = "agent"
+mode = "sequential"
 
 [workflows.workflow.metadata]
 agentRequireRestartOnSave = false
@@ -53,8 +54,7 @@ channel = "stable-24_05"
 
 [[ports]]
 localPort = 5000
-externalPort = 5173
+externalPort = 5000
 
 [[ports]]
 localPort = 5001
-externalPort = 8080
