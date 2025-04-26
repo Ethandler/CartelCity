@@ -1,13 +1,57 @@
 import pygame
 import math
+import os
 import sys
 import random
-import os
-import procedural_map  # Import our procedural map generator
-import character_sprites  # Import our South Park Canada-inspired character sprites
-import side_activities  # Import side activities
-import cheat_system  # Import cheat code system
-import event_system  # Import escalating events system
+import logging
+import traceback
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Asset path handling
+def get_asset_path(filename, possible_dirs=None):
+    """Try to find an asset file in various possible directories"""
+    if possible_dirs is None:
+        possible_dirs = [
+            '.',
+            './attached_assets',
+            '/attached_assets',
+            '../attached_assets',
+            '/home/runner/workspace/attached_assets'
+        ]
+    
+    # First try the direct filename
+    if os.path.exists(filename):
+        logging.info(f"Asset found at: {filename}")
+        return filename
+    
+    # Try with each possible directory
+    for directory in possible_dirs:
+        path = os.path.join(directory, filename)
+        if os.path.exists(path):
+            logging.info(f"Asset found at: {path}")
+            return path
+    
+    logging.warning(f"Asset not found: {filename}")
+    return None
+
+try:
+    # Import our module dependencies with error handling
+    logging.info("Importing game modules...")
+    import procedural_map  # Import our procedural map generator
+    import character_sprites  # Import our South Park Canada-inspired character sprites
+    import side_activities  # Import side activities
+    import cheat_system  # Import cheat code system
+    import event_system  # Import escalating events system
+    logging.info("All modules imported successfully")
+except ImportError as e:
+    logging.error(f"Failed to import required module: {e}")
+    sys.exit(1)
+except Exception as e:
+    logging.error(f"Unexpected error during module import: {e}")
+    traceback.print_exc()
+    sys.exit(1)
 
 class Map:
     def __init__(self):
@@ -2914,23 +2958,52 @@ def detect_mobile():
         return False
 
 def main():
-    # Allow separate window for PC users
-    # Don't force specific video driver, let Python choose the best available
-    # Detect if we're on Replit and only use x11 if we are
+    # Configure logging for the main function
+    logging.info("Starting game application")
+    
+    # Environment setup with validation
+    display_env = os.environ.get('DISPLAY', '')
+    if not display_env and 'REPL_ID' in os.environ:
+        os.environ['DISPLAY'] = ':0'
+        logging.info("Setting DISPLAY=:0 for Replit environment")
+    
+    # Check if we're on Replit and set x11 driver
     if os.environ.get('REPL_ID'):
+        logging.info("Running in Replit environment, using x11 driver")
         os.environ['SDL_VIDEODRIVER'] = 'x11'
         os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
-
+    
+    # Log all critical environment variables
+    logging.info(f"Environment: DISPLAY={os.environ.get('DISPLAY', 'not set')}")
+    logging.info(f"Environment: SDL_VIDEODRIVER={os.environ.get('SDL_VIDEODRIVER', 'not set')}")
+    logging.info(f"Environment: LIBGL_ALWAYS_SOFTWARE={os.environ.get('LIBGL_ALWAYS_SOFTWARE', 'not set')}")
+    
     # Only set mobile mode if we're actually on mobile
     is_mobile = detect_mobile()
+    logging.info(f"Mobile mode detection: {is_mobile}")
 
     try:
-        pygame.init()
-        print("Pygame initialized successfully")
-
-        # Print display info
-        print(f"Display driver: {pygame.display.get_driver()}")
-        print(f"Display info: {pygame.display.Info()}")
+        # Initialize pygame with enhanced error handling
+        try:
+            pygame.init()
+            logging.info("Pygame initialized successfully")
+            
+            # Print display info with error checking
+            try:
+                driver = pygame.display.get_driver()
+                logging.info(f"Display driver: {driver}")
+            except Exception as driver_error:
+                logging.error(f"Error getting display driver: {driver_error}")
+                
+            try:
+                display_info = pygame.display.Info()
+                logging.info(f"Display info: {display_info}")
+            except Exception as info_error:
+                logging.error(f"Error getting display info: {info_error}")
+                
+        except Exception as pygame_error:
+            logging.error(f"Error initializing Pygame: {pygame_error}")
+            raise
 
         game = Game()
 
