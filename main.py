@@ -4,6 +4,7 @@ import sys
 import random
 import os
 import procedural_map  # Import our procedural map generator
+import character_sprites  # Import our South Park Canada-inspired character sprites
 
 class Map:
     def __init__(self):
@@ -943,7 +944,9 @@ class Player:
             'shirt': (200, 0, 0),        # Red shirt
             'pants': (0, 0, 150),        # Dark blue pants
             'shoes': (40, 40, 40),       # Dark shoes
-            'eyes': (0, 0, 0)            # Black eyes
+            'eyes': (0, 0, 0),           # Black eyes
+            'mouth': (50, 0, 0),         # Dark red mouth
+            'outline': (0, 0, 0)         # Black outline
         }
         self.in_vehicle = None
         self.vehicle_entry_cooldown = 0
@@ -1045,107 +1048,33 @@ class Player:
                 self._first_draw = True
 
             # Create a surface for the character with transparency
-            char_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
-
-            # Animation offsets
-            walk_offset = math.sin(self.animation_frame * math.pi) * 2 if self.moving else 0
-            head_bob = math.sin(self.animation_frame * math.pi * 2) * 1.5  # South Park style head bob
-
-            # Draw character from top-down perspective
-            # Head (South Park Canadian style)
-            head_top = self.size - head_bob
-            head_bottom = self.size + head_bob
-            head_width = self.size * 0.8
-
-            # Add debug outline to make character more visible
-            pygame.draw.rect(char_surface, (255, 255, 0, 100), (0, 0, self.size * 2, self.size * 2), 1)
-
-            # Top of head (bigger for visibility)
-            pygame.draw.ellipse(
-                char_surface,
-                self.colors['skin'],
-                (self.size - head_width/2, head_top - head_width/2, head_width, head_width)
-            )
-
-            # Bottom of head
-            pygame.draw.ellipse(
-                char_surface,
-                self.colors['skin'],
-                (self.size - head_width/2, head_bottom - head_width/2, head_width * 0.8, head_width * 0.4)
-            )
-
-            # Beady eyes
-            eye_size = 2
-            eye_spacing = 4
-            pygame.draw.circle(
-                char_surface,
-                self.colors['eyes'],
-                (self.size - eye_spacing, self.size),
-                eye_size
-            )
-            pygame.draw.circle(
-                char_surface,
-                self.colors['eyes'],
-                (self.size + eye_spacing, self.size),
-                eye_size
-            )
-
-            # Body (simple oval shape)
-            body_points = [
-                (self.size - self.size * 0.3, self.size + head_width * 0.3),    # Top left
-                (self.size + self.size * 0.3, self.size + head_width * 0.3),    # Top right
-                (self.size + self.size * 0.4, self.size + self.size * 0.6),     # Bottom right
-                (self.size - self.size * 0.4, self.size + self.size * 0.6)      # Bottom left
-            ]
-            pygame.draw.polygon(char_surface, self.colors['shirt'], body_points)
-
-            # Draw the rest of the character
-            if self.moving:
-                leg_offset = walk_offset * 1.5
-                # Left leg
-                left_leg = [
-                    (self.size - self.size * 0.25, self.size + self.size * 0.5),
-                    (self.size - self.size * 0.15, self.size + self.size * 0.5),
-                    (self.size - self.size * 0.2 + leg_offset, self.size + self.size * 0.8),
-                    (self.size - self.size * 0.3 + leg_offset, self.size + self.size * 0.8)
-                ]
-                # Right leg
-                right_leg = [
-                    (self.size + self.size * 0.15, self.size + self.size * 0.5),
-                    (self.size + self.size * 0.25, self.size + self.size * 0.5),
-                    (self.size + self.size * 0.3 - leg_offset, self.size + self.size * 0.8),
-                    (self.size + self.size * 0.2 - leg_offset, self.size + self.size * 0.8)
-                ]
-                pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
-                pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
-
-                # Shoes
-                pygame.draw.circle(char_surface, self.colors['shoes'],
-                                 (self.size - self.size * 0.25 + leg_offset, self.size + self.size * 0.8), 3)
-                pygame.draw.circle(char_surface, self.colors['shoes'],
-                                 (self.size + self.size * 0.25 - leg_offset, self.size + self.size * 0.8), 3)
+            char_surface = pygame.Surface((self.size * 3, self.size * 3), pygame.SRCALPHA)
+            
+            # Use the South Park Canada-style character sprites
+            if self.in_vehicle:
+                # Just draw the head if in vehicle
+                head_bob = math.sin(self.animation_frame * math.pi * 2) * (self.size * 0.1)  # Exaggerated head bob
+                character_sprites.draw_canadian_head(
+                    char_surface, 
+                    self.size * 1.5,  # Center x of surface
+                    self.size * 1.2,  # Top position (offset to show above vehicle)
+                    self.size * 0.9,  # Slightly smaller for better proportions
+                    self.colors,
+                    head_bob,
+                    self.direction
+                )
             else:
-                # Draw standing legs
-                left_leg = [
-                    (self.size - self.size * 0.25, self.size + self.size * 0.5),
-                    (self.size- self.size * 0.15, self.size + self.size * 0.5),
-                    (self.size - self.size * 0.2, self.size + self.size * 0.8),
-                    (self.size - self.size * 0.3, self.size + self.size * 0.8)
-                ]
-                right_leg = [
-                    (self.size + self.size * 0.15, self.size + self.size * 0.5),
-                    (self.size + self.size * 0.25, self.size + self.size * 0.5),
-                    (self.size + self.size * 0.3, self.size + self.size * 0.8),
-                    (self.size + self.size * 0.2, self.size + self.size * 0.8)
-                ]
-                pygame.draw.polygon(char_surface, self.colors['pants'], left_leg)
-                pygame.draw.polygon(char_surface, self.colors['pants'], right_leg)
-
-                # Shoes
-                pygame.draw.circle(char_surface, self.colors['shoes'],
-                                 (self.size - self.size * 0.25, self.size + self.size * 0.8), 3)
-                pygame.draw.circle(char_surface, self.colors['shoes'],
-                                 (self.size + self.size * 0.25, self.size + self.size * 0.8), 3)
+                # Draw complete character
+                character_sprites.draw_canadian_character(
+                    char_surface,
+                    self.size * 1.5,  # Center x of surface 
+                    self.size * 1.5,  # Center y of surface
+                    self.size * 1.2,  # Size with scaling factor for visibility
+                    self.colors,
+                    self.animation_frame,
+                    self.moving,
+                    self.direction
+                )
 
             # Draw weapon if player has one and not in vehicle
             if self.has_weapon and not self.in_vehicle:
