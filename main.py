@@ -5,6 +5,9 @@ import random
 import os
 import procedural_map  # Import our procedural map generator
 import character_sprites  # Import our South Park Canada-inspired character sprites
+import side_activities  # Import side activities
+import cheat_system  # Import cheat code system
+import event_system  # Import escalating events system
 
 class Map:
     def __init__(self):
@@ -1924,6 +1927,13 @@ class Game:
 
         self.width = 800
         self.height = 600
+        
+        # Initialize game subsystems
+        self.message = ""
+        self.message_timer = 0
+        self.big_head_mode = False  # For cheat codes
+        self.visual_effects = []    # For special effects
+        self.sound_effects = []     # For sound effects
 
         try:
             # Use resizable window for desktop mode
@@ -1970,6 +1980,17 @@ class Game:
         # Force camera to valid position
         self.camera_x = max(0, min(self.camera_x, self.map.width - self.width))
         self.camera_y = max(0, min(self.camera_y, self.map.height - self.height))
+        
+        # Initialize side activities system
+        self.side_activities = []
+        self.init_side_activities()
+        
+        # Initialize cheat code system
+        self.cheat_system = cheat_system.CheatSystem(self)
+        self.dialogue_system = cheat_system.DialogueSystem(self, self.cheat_system)
+        
+        # Initialize escalating events system
+        self.event_system = event_system.EventSystem(self)
 
         print(f"Initial player position: ({self.player.x}, {self.player.y})")
         print(f"Initial camera position: ({self.camera_x}, {self.camera_y})")
@@ -2098,23 +2119,49 @@ class Game:
                 elif event.key == pygame.K_UP:
                     self.key_states['up'] = True
                     print("UP key pressed - state set to True")
+                    # Send to cheat system for cheat code sequence
+                    self.cheat_system.process_input("up")
                 elif event.key == pygame.K_DOWN:
                     self.key_states['down'] = True
                     print("DOWN key pressed - state set to True")
+                    # Send to cheat system for cheat code sequence
+                    self.cheat_system.process_input("down")
                 elif event.key == pygame.K_LEFT:
                     self.key_states['left'] = True
                     print("LEFT key pressed - state set to True")
+                    # Send to cheat system for cheat code sequence
+                    self.cheat_system.process_input("left")
                 elif event.key == pygame.K_RIGHT:
                     self.key_states['right'] = True
                     print("RIGHT key pressed - state set to True")
+                    # Send to cheat system for cheat code sequence
+                    self.cheat_system.process_input("right")
                 elif event.key == pygame.K_SPACE:
                     self.key_states['space'] = True
+                    # Send to cheat system for cheat code sequence
+                    self.cheat_system.process_input("space")
                     if not self.paused:
                         self.player.shoot()
                 elif event.key == pygame.K_e:
                     self.key_states['e'] = True
                     if not self.paused:
-                        self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
+                        # Check if dialogue is active first
+                        if self.dialogue_system.active:
+                            self.dialogue_system.advance_dialogue()
+                        else:
+                            # Try to interact with a nearby pedestrian for dialogue
+                            for ped in self.map.pedestrians:
+                                # Check if player is close to pedestrian
+                                dx = ped.x - self.player.x
+                                dy = ped.y - self.player.y
+                                distance = math.sqrt(dx*dx + dy*dy)
+                                if distance < 50:  # 50 pixels interaction range
+                                    # Start dialogue with this pedestrian
+                                    self.dialogue_system.start_dialogue(ped)
+                                    break
+                            else:
+                                # If no dialogue started, try to enter/exit vehicle
+                                self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
                 elif event.key == pygame.K_ESCAPE:
@@ -2181,8 +2228,26 @@ class Game:
 
                             # Perform action immediately for action buttons
                             if name == "action":
-                                self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
+                                # Similar logic to E key press
+                                if self.dialogue_system.active:
+                                    self.dialogue_system.advance_dialogue()
+                                else:
+                                    # Try to interact with a nearby pedestrian for dialogue
+                                    for ped in self.map.pedestrians:
+                                        # Check if player is close to pedestrian
+                                        dx = ped.x - self.player.x
+                                        dy = ped.y - self.player.y
+                                        distance = math.sqrt(dx*dx + dy*dy)
+                                        if distance < 50:  # 50 pixels interaction range
+                                            # Start dialogue with this pedestrian
+                                            self.dialogue_system.start_dialogue(ped)
+                                            break
+                                    else:
+                                        # If no dialogue started, try to enter/exit vehicle
+                                        self.player.enter_exit_vehicle(self.map.vehicles + self.map.police_vehicles)
                             elif name == "shoot":
+                                # Send to cheat system for cheat code sequence
+                                self.cheat_system.process_input("space")
                                 self.player.shoot()
 
             elif event.type == pygame.MOUSEBUTTONUP and self.touch_enabled:
@@ -2281,6 +2346,17 @@ class Game:
         instr_rect = instr.get_rect(center=(self.width/2, self.height - 50))
         self.screen.blit(instr, instr_rect)
 
+    def init_side_activities(self):
+        """Initialize side activities"""
+        # Add illegal taxi activity
+        self.side_activities.append(side_activities.IllegalTaxi(self))
+        
+        # Add garbage truck race activity
+        self.side_activities.append(side_activities.GarbageTruckRace(self))
+        
+        # Add parking lot fight club activity
+        self.side_activities.append(side_activities.ParkingLotFightClub(self))
+    
     def init_touch_controls(self):
         """Initialize touch control buttons and their positions"""
         # D-pad positions (bottom left)
@@ -2375,6 +2451,11 @@ class Game:
         # Blit the control surface onto the screen
         self.screen.blit(control_surface, (0, 0))
 
+    def show_message(self, text):
+        """Display a message to the player"""
+        self.message = text
+        self.message_timer = 180  # 3 seconds @ 60 FPS
+    
     def update_camera(self):
         # Use a much tighter zoom level for authentic GTA1/2 view
         # This creates a very zoomed-in view focused primarily on the player and immediate surroundings
@@ -2446,6 +2527,56 @@ class Game:
 
             # Only update game state if not paused
             if not self.paused:
+                # Update systems
+                self.event_system.update(self.player.x, self.player.y)
+                self.cheat_system.update()
+                
+                # Update dialogue system
+                if self.dialogue_system.active:
+                    self.dialogue_system.update()
+                
+                # Check for side activities that can be triggered
+                for activity in self.side_activities:
+                    if not activity.active and activity.can_trigger(self.player.x, self.player.y):
+                        self.show_message(f"Press E to start: {activity.name}")
+                        # Check if E is pressed to trigger the activity
+                        if self.key_states['e']:
+                            activity.trigger()
+                
+                # Update active side activities
+                for activity in self.side_activities:
+                    if activity.active:
+                        activity.update(self.player, self.map.walls, 
+                                      self.map.vehicles + self.map.police_vehicles, 
+                                      self.map.pedestrians)
+                
+                # Check for pedestrian interactions (for dialogue)
+                if not self.dialogue_system.active and not self.player.in_vehicle:
+                    for ped in self.map.pedestrians:
+                        if not getattr(ped, 'is_dead', False):
+                            # Check if we're close enough to talk
+                            dx = self.player.x - ped.x
+                            dy = self.player.y - ped.y
+                            distance = math.sqrt(dx*dx + dy*dy)
+                            
+                            if distance < 50:  # Close enough to talk
+                                self.show_message("Press E to talk")
+                                if self.key_states['e']:
+                                    self.dialogue_system.start_dialogue(ped)
+                                    break
+                            
+                # Check for dialogue continuation
+                if self.dialogue_system.active and self.key_states['e']:
+                    self.dialogue_system.advance_dialogue()
+                
+                # Process cheat code input from key states
+                for key in ['up', 'down', 'left', 'right', 'space']:
+                    if self.key_states[key] and not getattr(self, '_prev_key_states', {}).get(key, False):
+                        # Key just pressed this frame
+                        self.cheat_system.process_input(key)
+                
+                # Store previous key states for next frame
+                self._prev_key_states = self.key_states.copy()
                 if not self.player.in_vehicle:
                     dx = 0
                     dy = 0
@@ -2661,6 +2792,17 @@ class Game:
                 # Update game objects
                 self.player.update()
                 self.map.update(self.player)
+                
+                # Update new systems
+                self.cheat_system.update()
+                self.dialogue_system.update()
+                self.event_system.update(self.player.x, self.player.y)
+                
+                # Update side activities
+                for activity in self.side_activities:
+                    if activity.active:
+                        activity.update(self.player, self.map.walls, self.map.vehicles, self.map.pedestrians)
+                
                 self.update_camera()
 
             # Draw everything
@@ -2686,6 +2828,43 @@ class Game:
             
             # Draw auto-control information if active
             self.draw_auto_control_info()
+            
+            # Draw event system visualization (only in debug mode)
+            if self.show_debug:
+                self.event_system.draw(self.screen, self.camera_x, self.camera_y, self.font)
+                
+            # Draw active side activities
+            for activity in self.side_activities:
+                if activity.active or getattr(activity, 'completed', False):
+                    activity.draw(self.screen, self.camera_x, self.camera_y, self.font)
+            
+            # Draw dialogue system if active
+            if self.dialogue_system.active:
+                self.dialogue_system.draw(self.screen, self.camera_x, self.camera_y)
+                
+            # Draw cheat system UI
+            self.cheat_system.draw(self.screen, self.font)
+            
+            # Draw message
+            if self.message_timer > 0:
+                self.message_timer -= 1
+                message_surface = self.font.render(self.message, True, (255, 255, 255))
+                message_x = self.width // 2 - message_surface.get_width() // 2
+                message_y = 50
+                
+                # Draw semi-transparent background
+                bg_rect = message_surface.get_rect()
+                bg_rect.x = message_x - 10
+                bg_rect.y = message_y - 5
+                bg_rect.width += 20
+                bg_rect.height += 10
+                
+                s = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+                s.fill((0, 0, 0, 150))  # Black with 150 alpha
+                self.screen.blit(s, (bg_rect.x, bg_rect.y))
+                
+                # Draw text
+                self.screen.blit(message_surface, (message_x, message_y))
 
             # Only show controls help when not paused
             if not self.paused:
