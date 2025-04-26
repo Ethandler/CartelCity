@@ -21,8 +21,8 @@ def send_static(path):
 def run_game():
     # Give the web server a moment to start
     time.sleep(2)
-    # Start the game in a separate process
-    subprocess.Popen(['python', 'main.py'])
+    # Start the game in a separate process using the VNC launcher
+    subprocess.Popen(['python', 'run_in_vnc.py'])
 
 if __name__ == '__main__':
     # Start the game in a separate thread

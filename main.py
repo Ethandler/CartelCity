@@ -940,8 +940,9 @@ class Player:
         self.rect = pygame.Rect(x - self.size/2, y - self.size/2, self.size, self.size)
         self.direction = 'down'
         self.moving = False
-        self.animation_frame = 0
+        self.animation_frame = 0.0
         self.animation_speed = 0.2
+        self.game = None  # Reference to the game object
         self.colors = {
             'skin': (255, 223, 196),     # Lighter skin tone
             'shirt': (200, 0, 0),        # Red shirt

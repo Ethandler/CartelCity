@@ -45,7 +45,7 @@ def get_random_character_colors():
         'outline': CANADIAN_COLORS['outline']
     }
 
-def draw_canadian_head(surface, x, y, size, colors, head_bob=0, direction='down'):
+def draw_canadian_head(surface, x, y, size, colors, head_bob=0.0, direction='down'):
     """
     Draw a South Park Canada-style character head
     
@@ -123,7 +123,7 @@ def draw_canadian_head(surface, x, y, size, colors, head_bob=0, direction='down'
         max(1, int(size * 0.05))
     )
 
-def draw_canadian_body(surface, x, y, size, colors, walk_offset=0, direction='down'):
+def draw_canadian_body(surface, x, y, size, colors, walk_offset=0.0, direction='down'):
     """
     Draw a South Park Canada-style character body
     
@@ -199,7 +199,7 @@ def draw_canadian_body(surface, x, y, size, colors, walk_offset=0, direction='do
         (right_leg_x - shoe_size/2, y + body_height + leg_height - shoe_size/2, shoe_size, shoe_size)
     )
 
-def draw_canadian_character(surface, x, y, size, colors, animation_frame=0, moving=False, direction='down'):
+def draw_canadian_character(surface, x, y, size, colors, animation_frame=0.0, moving=False, direction='down'):
     """
     Draw a complete South Park Canada-style character
     
